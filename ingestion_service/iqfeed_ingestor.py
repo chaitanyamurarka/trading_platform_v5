@@ -2,6 +2,12 @@ import os
 import logging
 import time
 from datetime import datetime as dt
+# For timezone-aware datetime objects. ZoneInfo is in the standard library for Python 3.9+.
+# If using an older version, you might need 'pip install backports.zoneinfo' or use 'pytz'.
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 
 import numpy as np
 from dotenv import load_dotenv
@@ -30,21 +36,30 @@ query_api = influx_client.query_api()
 
 def format_data_for_influx(dtn_data: np.ndarray, symbol: str, exchange: str, measurement: str) -> list[Point]:
     """
-    Converts NumPy array from pyiqfeed to a list of InfluxDB Points.
+    Converts NumPy array from pyiqfeed to a list of InfluxDB Points,
+    correctly handling the source timezone.
     """
     points = []
     has_time_field = 'time' in dtn_data.dtype.names
     has_prd_vlm = 'prd_vlm' in dtn_data.dtype.names
     has_tot_vlm = 'tot_vlm' in dtn_data.dtype.names
 
+    # Assume NASDAQ data from IQFeed is in US/Eastern time.
+    source_timezone = ZoneInfo("America/New_York")
+
     for rec in dtn_data:
+        # Create a naive datetime object first from the IQFeed data
         if has_time_field:
-            timestamp_dt = iq.date_us_to_datetime(rec['date'], rec['time'])
+            naive_timestamp_dt = iq.date_us_to_datetime(rec['date'], rec['time'])
         else:
             daily_date = iq.datetime64_to_date(rec['date'])
-            timestamp_dt = dt.combine(daily_date, dt.min.time())
+            naive_timestamp_dt = dt.combine(daily_date, dt.min.time())
 
-        unix_timestamp_microseconds = int(timestamp_dt.timestamp() * 1_000_000)
+        # Make the naive datetime "aware" of its actual timezone (ET)
+        aware_timestamp_dt = naive_timestamp_dt.replace(tzinfo=source_timezone)
+
+        # .timestamp() on an aware datetime correctly converts it to a UTC-based Unix timestamp.
+        unix_timestamp_microseconds = int(aware_timestamp_dt.timestamp() * 1_000_000)
 
         volume = 0
         if has_prd_vlm:

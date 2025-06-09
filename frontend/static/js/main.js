@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeToggle = document.getElementById('theme-toggle');
     const dataSummaryElement = document.getElementById('dataSummary');
     const loadingIndicator = document.getElementById('loadingIndicator');
+    const timezoneSelect = document.getElementById('timezone'); // New: Get timezone selector
 
     let allChartData = [];
     let allVolumeData = [];
@@ -65,21 +66,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const getChartTheme = () => {
         const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+        const selectedTimezone = timezoneSelect.value;
         return {
             layout: { background: { type: 'solid', color: isDarkMode ? '#1d232a' : '#ffffff' }, textColor: isDarkMode ? '#a6adba' : '#1f2937', fontFamily: 'Inter, sans-serif' },
             grid: { vertLines: { color: isDarkMode ? '#2a323c' : '#e5e7eb' }, horzLines: { color: isDarkMode ? '#2a323c' : '#e5e7eb' } },
             crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
             rightPriceScale: { borderColor: isDarkMode ? '#2a323c' : '#e5e7eb' },
-            timeScale: { borderColor: isDarkMode ? '#2a323c' : '#e5e7eb', timeVisible: true, secondsVisible: ['1s', '5s', '10s', '15s', '30s', '45s'].includes(intervalSelect.value) },
+            timeScale: { 
+                borderColor: isDarkMode ? '#2a323c' : '#e5e7eb', 
+                timeVisible: true, 
+                secondsVisible: ['1s', '5s', '10s', '15s', '30s', '45s'].includes(intervalSelect.value),
+                timezone: selectedTimezone, // New: Apply selected timezone
+            },
         };
     };
     
     function initializeCharts() {
         if (mainChart) mainChart.remove();
         mainChart = LightweightCharts.createChart(chartContainer, getChartTheme());
+        
         candleSeries = mainChart.addSeries(LightweightCharts.CandlestickSeries, { upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' });
+        
+        // New: Improved auto-scaling for the main price scale
+        mainChart.priceScale('right').applyOptions({
+            scaleMargins: {
+                top: 0.2, // 20% margin above the highest price
+                bottom: 0.15, // 15% margin below the lowest price
+            },
+        });
+
         volumeSeries = mainChart.addSeries(LightweightCharts.HistogramSeries, { color: '#9ca3af', priceFormat: { type: 'volume' }, priceScaleId: '' });
-        mainChart.priceScale('').applyOptions({ scaleMargins: { top: 0.7, bottom: 0 } });
+        
+        // Update: Adjust volume series scale to take up less space
+        mainChart.priceScale('').applyOptions({ 
+            scaleMargins: { top: 0.8, bottom: 0 } // Volume chart takes up 20% of its pane
+        });
 
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(async (newVisibleRange) => {
             if (!newVisibleRange || currentlyFetching || allDataLoaded || !chartRequestId) {
@@ -294,6 +315,14 @@ document.addEventListener('DOMContentLoaded', () => {
             currentlyFetching = false;
         }
     }
+    
+    // New: Event listener for timezone changes
+    timezoneSelect.addEventListener('change', () => {
+        if (mainChart) {
+            // Re-apply options, which will include the new timezone
+            mainChart.applyOptions(getChartTheme());
+        }
+    });
 
     loadChartBtn.addEventListener('click', loadInitialChart);
     window.addEventListener('resize', () => { if (mainChart) mainChart.resize(chartContainer.clientWidth, chartContainer.clientHeight); });

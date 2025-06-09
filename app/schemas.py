@@ -30,23 +30,25 @@ class Interval(str, Enum):
 class CandleBase(BaseModel):
     """
     Base schema for a single OHLC (Open, High, Low, Close) data point.
-    It includes a validator to automatically compute the UNIX timestamp.
+    The UNIX timestamp is now provided directly by the InfluxDB query.
     """
+    # The datetime timestamp can be kept for logging/debugging or removed if not needed.
     timestamp: datetime = Field(..., description="The timestamp of the candle (timezone-aware).")
     open: float = Field(..., description="The opening price for the candle period.")
     high: float = Field(..., description="The highest price for the candle period.")
     low: float = Field(..., description="The lowest price for the candle period.")
     close: float = Field(..., description="The closing price for the candle period.")
     volume: Optional[float] = Field(None, description="The trading volume for the candle period.")
-    unix_timestamp: Optional[float] = Field(None, description="The timestamp represented as a UNIX epoch float. Automatically calculated.")
+    # This field will now be populated directly from the InfluxDB query result.
+    unix_timestamp: float = Field(..., description="The timestamp represented as a UNIX epoch float.")
 
-    @model_validator(mode='after')
-    def calculate_unix_timestamp(self) -> 'CandleBase':
-        """Calculates and sets the UNIX timestamp from the datetime timestamp."""
-        if self.timestamp:
-            self.unix_timestamp = self.timestamp.timestamp()
-        return self
-
+    # The custom model_validator is no longer needed.
+    # @model_validator(mode='after')
+    # def calculate_unix_timestamp(self) -> 'CandleBase':
+    #     """Calculates and sets the UNIX timestamp from the datetime timestamp."""
+    #     if self.timestamp:
+    #         self.unix_timestamp = self.timestamp.timestamp()
+    #     return self
 class Candle(CandleBase):
     """
     Represents a single OHLC candle, configured for ORM (Object-Relational Mapping) mode.

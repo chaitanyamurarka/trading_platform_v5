@@ -1,4 +1,5 @@
-# In app/services/historical_data_service.py
+# In app/historical_data_service.py
+
 import logging
 from datetime import datetime
 from typing import List
@@ -44,6 +45,7 @@ def get_initial_historical_data(
                   |> filter(fn: (r) => r._measurement == "ohlc_{interval_val}")
                   |> filter(fn: (r) => r.symbol == "{token}")
                   |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+                  |> map(fn: (r) => ({{r with unix_timestamp: float(v: r._time) / 1000000000.0 }}))
                   |> sort(columns: ["_time"])
             """
             
@@ -53,13 +55,15 @@ def get_initial_historical_data(
             for table in tables:
                 for record in table.records:
                     # ** THIS IS THE CORRECTED SECTION **
+                    # Accessing record values using dictionary-style bracket notation
                     full_data.append(schemas.Candle(
                         timestamp=record.get_time(),
                         open=record['open'],
                         high=record['high'],
                         low=record['low'],
                         close=record['close'],
-                        volume=record['volume']
+                        volume=record['volume'],
+                        unix_timestamp=record['unix_timestamp']
                     ))
 
             if not full_data:
@@ -85,30 +89,6 @@ def get_initial_historical_data(
         message=f"Initial data loaded. Displaying last {len(candles_to_send)} of {total_available} candles."
     )
 
-def get_historical_data_chunk(
-    request_id: str,
-    offset: int,
-    limit: int = 5000
-) -> schemas.HistoricalDataChunkResponse:
-    """
-    Retrieves a subsequent chunk of historical data from the cache using the request_id.
-    """
-    full_data = get_cached_ohlc_data(request_id)
-    if full_data is None:
-        raise HTTPException(status_code=404, detail="Data for this request not found or has expired.")
-
-    total_available = len(full_data)
-    if offset < 0 or offset >= total_available:
-        return schemas.HistoricalDataChunkResponse(candles=[], offset=offset, limit=limit, total_available=total_available)
-        
-    chunk = full_data[offset: offset + limit]
-    
-    return schemas.HistoricalDataChunkResponse(
-        candles=chunk,
-        offset=offset,
-        limit=limit,
-        total_available=total_available
-    )
 def get_historical_data_chunk(
     request_id: str,
     offset: int,

@@ -1,7 +1,8 @@
 fastapi
 uvicorn
-redis                   # For connecting to ElastiCache for Redis
+redis    
 influxdb-client
 python-dotenv
 pydantic-settings
 pywin32
+numpy

@@ -36,7 +36,7 @@
 
         <div class="card bg-base-100 shadow-xl rounded-box mb-4">
             <div class="card-body p-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 items-end">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 items-end">
                     <div class="form-control">
                         <label class="label"><span class="label-text">Exchange</span></label>
                         <select id="exchange" class="select select-bordered">
@@ -99,6 +99,13 @@
                             <option value="America/Toronto">Toronto</option>
                             <option value="America/Sao_Paulo">Sao Paulo</option>
                             <option value="Pacific/Honolulu">Honolulu</option>
+                        </select>
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text">Scaling</span></label>
+                        <select id="scaling" class="select select-bordered">
+                            <option value="automatic" selected>Automatic</option>
+                            <option value="linear">Linear</option>
                         </select>
                     </div>
                 </div>

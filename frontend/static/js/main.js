@@ -9,7 +9,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const themeToggle = document.getElementById('theme-toggle');
     const dataSummaryElement = document.getElementById('dataSummary');
     const loadingIndicator = document.getElementById('loadingIndicator');
-    const timezoneSelect = document.getElementById('timezone'); // New: Get timezone selector
+    const timezoneSelect = document.getElementById('timezone');
+    const scalingSelect = document.getElementById('scaling'); // New: Get scaling selector
 
     let allChartData = [];
     let allVolumeData = [];
@@ -79,9 +80,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 borderColor: isDarkMode ? '#2a323c' : '#e5e7eb', 
                 timeVisible: true, 
                 secondsVisible: ['1s', '5s', '10s', '15s', '30s', '45s'].includes(intervalSelect.value),
-                timezone: selectedTimezone, // New: Apply selected timezone
+                timezone: selectedTimezone,
             },
         };
+    };
+
+    // New: Function to get price scale options based on selection
+    const getPriceScaleOptions = () => {
+        const scalingMode = scalingSelect.value;
+        if (scalingMode === 'automatic') {
+            return {
+                autoscale: true,
+                scaleMargins: {
+                    top: 0.2,
+                    bottom: 0.15,
+                },
+            };
+        } else { // 'linear'
+            return {
+                autoscale: true,
+                scaleMargins: {
+                    top: 0,
+                    bottom: 0,
+                },
+            };
+        }
     };
     
     function initializeCharts() {
@@ -90,19 +113,13 @@ document.addEventListener('DOMContentLoaded', () => {
         
         candleSeries = mainChart.addSeries(LightweightCharts.CandlestickSeries, { upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' });
         
-        // New: Improved auto-scaling for the main price scale
-        mainChart.priceScale('right').applyOptions({
-            scaleMargins: {
-                top: 0.2, // 20% margin above the highest price
-                bottom: 0.15, // 15% margin below the lowest price
-            },
-        });
+        // Apply scaling options
+        mainChart.priceScale('right').applyOptions(getPriceScaleOptions());
 
         volumeSeries = mainChart.addSeries(LightweightCharts.HistogramSeries, { color: '#9ca3af', priceFormat: { type: 'volume' }, priceScaleId: '' });
         
-        // Update: Adjust volume series scale to take up less space
         mainChart.priceScale('').applyOptions({ 
-            scaleMargins: { top: 0.8, bottom: 0 } // Volume chart takes up 20% of its pane
+            scaleMargins: { top: 0.8, bottom: 0 }
         });
 
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(async (newVisibleRange) => {
@@ -136,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP error ${response.status}: ${errorData.detail || 'Failed to fetch chunk'}`);
             }
             
-            const chunkData = await response.json(); // HistoricalDataChunkResponse
+            const chunkData = await response.json();
             
             if (!chunkData || !Array.isArray(chunkData.candles) || chunkData.candles.length === 0) {
                 allDataLoaded = true;
@@ -249,7 +266,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Reset state for new chart load
         allDataLoaded = false;
         allChartData = [];
         allVolumeData = [];
@@ -272,19 +288,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP error ${response.status}: ${errorData.detail || 'Failed to fetch data'}`);
             }
             
-            const responseData = await response.json(); // HistoricalDataResponse
+            const responseData = await response.json();
 
             if (!responseData || !responseData.request_id || !Array.isArray(responseData.candles) || responseData.candles.length === 0) {
                 const message = responseData.message || 'No historical data available for this range.';
                 showToast(message, 'info');
-                // Clear the chart if no data is returned
                 if (candleSeries) candleSeries.setData([]);
                 if (volumeSeries) volumeSeries.setData([]);
                 dataSummaryElement.innerHTML = message;
                 return;
             }
 
-            // Store the new state from the initial response
             chartRequestId = responseData.request_id;
             chartTotalAvailable = responseData.total_available;
             chartCurrentOffset = responseData.offset;
@@ -339,6 +353,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             loadInitialChart();
         });
+    });
+
+    // New: Event listener for scaling options
+    scalingSelect.addEventListener('change', () => {
+        if (mainChart) {
+            mainChart.priceScale('right').applyOptions(getPriceScaleOptions());
+        }
     });
 
     window.addEventListener('resize', () => { if (mainChart) mainChart.resize(chartContainer.clientWidth, chartContainer.clientHeight); });

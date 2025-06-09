@@ -1,7 +1,6 @@
 // chaitanyamurarka/trading_platform_v3.1/trading_platform_v3.1-fd71c9072644cabd20e39b57bf2d47b25107e752/frontend/static/js/main.js
 document.addEventListener('DOMContentLoaded', () => {
     const chartContainer = document.getElementById('chartContainer');
-    const loadChartBtn = document.getElementById('loadChartBtn');
     const exchangeSelect = document.getElementById('exchange');
     const symbolSelect = document.getElementById('symbol');
     const intervalSelect = document.getElementById('interval');
@@ -36,6 +35,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 sessionToken = sessionData.session_token;
                 console.log(`Session started with token: ${sessionToken}`);
                 showToast(`Session started.`, 'info');
+
+                // Load the chart with default values as soon as the session is ready.
+                loadInitialChart();
+
                 if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
                 heartbeatIntervalId = setInterval(async () => {
                     if (sessionToken) {
@@ -274,6 +277,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!responseData || !responseData.request_id || !Array.isArray(responseData.candles) || responseData.candles.length === 0) {
                 const message = responseData.message || 'No historical data available for this range.';
                 showToast(message, 'info');
+                // Clear the chart if no data is returned
+                if (candleSeries) candleSeries.setData([]);
+                if (volumeSeries) volumeSeries.setData([]);
+                dataSummaryElement.innerHTML = message;
                 return;
             }
 
@@ -316,15 +323,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // New: Event listener for timezone changes
-    timezoneSelect.addEventListener('change', () => {
-        if (mainChart) {
-            // Re-apply options, which will include the new timezone
-            mainChart.applyOptions(getChartTheme());
-        }
+    const autoLoadControls = [
+        exchangeSelect,
+        symbolSelect,
+        intervalSelect,
+        startTimeInput,
+        endTimeInput,
+        timezoneSelect
+    ];
+
+    autoLoadControls.forEach(control => {
+        control.addEventListener('change', () => {
+            if (mainChart) {
+                mainChart.applyOptions(getChartTheme());
+            }
+            loadInitialChart();
+        });
     });
 
-    loadChartBtn.addEventListener('click', loadInitialChart);
     window.addEventListener('resize', () => { if (mainChart) mainChart.resize(chartContainer.clientWidth, chartContainer.clientHeight); });
 
     setDefaultDateTime();

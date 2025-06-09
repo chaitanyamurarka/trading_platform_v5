@@ -1,0 +1,15 @@
+# For InfluxDB
+influxdb-client
+
+# For DTN IQFeed Connection (already in your project)
+# You will need to install its dependencies if any are missing
+
+# For configuration
+python-dotenv
+
+pydantic_settings
+
+numpy
+
+# --- Windows-Specific Dependencies ---
+pywin32                 # Windows API access, may be req

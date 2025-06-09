@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+redis                   # For connecting to ElastiCache for Redis
+influxdb-client[ciso]   # The InfluxDB client, with ciso for better performance
+python-dotenv
+pydantic-settings

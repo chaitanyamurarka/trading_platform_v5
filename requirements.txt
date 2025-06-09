@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+redis                   # For connecting to ElastiCache for Redis
+influxdb-client
+python-dotenv
+pydantic-settings
+pywin32

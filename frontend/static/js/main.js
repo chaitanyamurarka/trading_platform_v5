@@ -1,4 +1,3 @@
-// chaitanyamurarka/trading_platform_v3.1/trading_platform_v3.1-fd71c9072644cabd20e39b57bf2d47b25107e752/frontend/static/js/main.js
 document.addEventListener('DOMContentLoaded', () => {
     const chartContainer = document.getElementById('chartContainer');
     const exchangeSelect = document.getElementById('exchange');
@@ -10,7 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const dataSummaryElement = document.getElementById('dataSummary');
     const loadingIndicator = document.getElementById('loadingIndicator');
     const timezoneSelect = document.getElementById('timezone');
-    const scalingSelect = document.getElementById('scaling'); // New: Get scaling selector
+    const scalingSelect = document.getElementById('scaling');
+
+    // State variable to track the previous scaling mode
+    let previousScalingMode = scalingSelect.value;
 
     let allChartData = [];
     let allVolumeData = [];
@@ -85,7 +87,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     };
 
-    // New: Function to get price scale options based on selection
     const getPriceScaleOptions = () => {
         const scalingMode = scalingSelect.value;
         if (scalingMode === 'automatic') {
@@ -113,7 +114,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         candleSeries = mainChart.addSeries(LightweightCharts.CandlestickSeries, { upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' });
         
-        // Apply scaling options
         mainChart.priceScale('right').applyOptions(getPriceScaleOptions());
 
         volumeSeries = mainChart.addSeries(LightweightCharts.HistogramSeries, { color: '#9ca3af', priceFormat: { type: 'volume' }, priceScaleId: '' });
@@ -355,11 +355,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // New: Event listener for scaling options
+    // Event listener for scaling options
     scalingSelect.addEventListener('change', () => {
-        if (mainChart) {
-            mainChart.priceScale('right').applyOptions(getPriceScaleOptions());
+        const newScalingMode = scalingSelect.value;
+
+        // Only perform a full reload when switching from Linear to Automatic.
+        if (previousScalingMode === 'linear' && newScalingMode === 'automatic') {
+            // Re-initialize the chart and reload all data.
+            initializeCharts();
+            loadInitialChart();
+        } else {
+            // For all other changes (like Automatic to Linear), just update the
+            // price scale. This keeps the user's zoom and position.
+            if (mainChart) {
+                mainChart.priceScale('right').applyOptions(getPriceScaleOptions());
+            }
         }
+
+        // Store the new mode as the previous mode for the next change.
+        previousScalingMode = newScalingMode;
     });
 
     window.addEventListener('resize', () => { if (mainChart) mainChart.resize(chartContainer.clientWidth, chartContainer.clientHeight); });

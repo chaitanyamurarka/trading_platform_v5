@@ -1,9 +1,14 @@
 # In app/historical_data_service.py
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 from typing import List
 from fastapi import HTTPException
+# Use zoneinfo for timezone conversions (available in Python 3.9+, backports for older versions)
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports import ZoneInfo
 
 from . import schemas
 from .cache import get_cached_ohlc_data, set_cached_ohlc_data
@@ -28,42 +33,66 @@ def get_initial_historical_data(
     interval_val: str,
     start_time: datetime,
     end_time: datetime,
+    timezone: str,
 ) -> schemas.HistoricalDataResponse:
     """
-    Main entry point for fetching historical data from the new architecture.
+    Main entry point for fetching historical data. It now performs timezone conversion.
     """
-    request_id = f"chart_data:{session_token}:{exchange}:{token}:{interval_val}:{start_time.isoformat()}:{end_time.isoformat()}"
+    # Include the timezone in the request_id to ensure the cache is unique per timezone.
+    request_id = f"chart_data:{session_token}:{exchange}:{token}:{interval_val}:{start_time.isoformat()}:{end_time.isoformat()}:{timezone}"
     
     full_data = get_cached_ohlc_data(request_id)
     
     if not full_data:
         logging.info(f"Cache MISS for {request_id}. Querying InfluxDB...")
         try:
+            # The Flux query is simplified to just fetch the raw data.
+            # Timestamp conversion is now handled in Python.
             flux_query = f"""
                 from(bucket: "{settings.INFLUX_BUCKET}")
                   |> range(start: {start_time.isoformat()}Z, stop: {end_time.isoformat()}Z)
                   |> filter(fn: (r) => r._measurement == "ohlc_{interval_val}")
                   |> filter(fn: (r) => r.symbol == "{token}")
                   |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
-                  |> map(fn: (r) => ({{r with unix_timestamp: float(v: r._time) / 1000000.0 }}))
                   |> sort(columns: ["_time"])
             """
             
             tables = query_api.query(query=flux_query)
             
             full_data = []
+            
+            try:
+                target_tz = ZoneInfo(timezone)
+            except Exception:
+                logging.warning(f"Invalid timezone '{timezone}' provided. Defaulting to UTC.")
+                target_tz = ZoneInfo("UTC")
+
             for table in tables:
                 for record in table.records:
-                    # ** THIS IS THE CORRECTED SECTION **
-                    # Accessing record values using dictionary-style bracket notation
+                    utc_dt = record.get_time()
+
+                    # Convert original UTC time to the target timezone to get local time components
+                    local_dt = utc_dt.astimezone(target_tz)
+                    
+                    # Create a "fake" UTC datetime using local components.
+                    # This is the trick to make lightweight-charts display local time as if it's UTC.
+                    fake_utc_dt = datetime(
+                        local_dt.year, local_dt.month, local_dt.day,
+                        local_dt.hour, local_dt.minute, local_dt.second,
+                        tzinfo=dt_timezone.utc
+                    )
+                    
+                    # Get the UNIX timestamp from the "fake" UTC datetime.
+                    unix_timestamp_for_chart = fake_utc_dt.timestamp()
+
                     full_data.append(schemas.Candle(
-                        timestamp=record.get_time(),
+                        timestamp=utc_dt,
                         open=record['open'],
                         high=record['high'],
                         low=record['low'],
                         close=record['close'],
                         volume=record['volume'],
-                        unix_timestamp=record['unix_timestamp']
+                        unix_timestamp=unix_timestamp_for_chart
                     ))
 
             if not full_data:
@@ -73,7 +102,7 @@ def get_initial_historical_data(
             logging.info(f"Cache SET for {request_id} with {len(full_data)} records.")
 
         except Exception as e:
-            logging.error(f"Error querying InfluxDB: {e}", exc_info=True)
+            logging.error(f"Error querying InfluxDB or processing data: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Failed to retrieve data from database.")
 
     total_available = len(full_data)

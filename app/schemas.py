@@ -80,38 +80,38 @@ class SessionInfo(BaseModel):
     """Schema for returning a new session token to the client."""
     session_token: str
 
-class OptimizationRequest(BaseModel):
-    """Defines the request body for submitting a strategy optimization task."""
-    strategy_id: str
-    symbol: str
-    interval: Interval
-    start_date: datetime
-    end_date: datetime
-    param_grid: Dict[str, List[Any]] = Field(description='Example: {"param1": [10, 20], "param2": [0.5, 0.6]}')
+# class OptimizationRequest(BaseModel):
+#     """Defines the request body for submitting a strategy optimization task."""
+#     strategy_id: str
+#     symbol: str
+#     interval: Interval
+#     start_date: datetime
+#     end_date: datetime
+#     param_grid: Dict[str, List[Any]] = Field(description='Example: {"param1": [10, 20], "param2": [0.5, 0.6]}')
 
-class OptimizationTaskResult(BaseModel):
-    """Schema for the final result of a completed optimization task."""
-    best_params: Dict[str, Any]
-    best_score: float
+# class OptimizationTaskResult(BaseModel):
+#     """Schema for the final result of a completed optimization task."""
+#     best_params: Dict[str, Any]
+#     best_score: float
 
-class JobStatus(str, Enum):
-    """Enumeration of possible statuses for a background job."""
-    PENDING = "PENDING"
-    RECEIVED = "RECEIVED"
-    STARTED = "STARTED"
-    SUCCESS = "SUCCESS"
-    FAILURE = "FAILURE"
-    RETRY = "RETRY"
-    REVOKED = "REVOKED"
+# class JobStatus(str, Enum):
+#     """Enumeration of possible statuses for a background job."""
+#     PENDING = "PENDING"
+#     RECEIVED = "RECEIVED"
+#     STARTED = "STARTED"
+#     SUCCESS = "SUCCESS"
+#     FAILURE = "FAILURE"
+#     RETRY = "RETRY"
+#     REVOKED = "REVOKED"
 
-class JobStatusResponse(BaseModel):
-    """Schema for the response when querying the status of a background job."""
-    job_id: str
-    status: JobStatus
-    result: Optional[OptimizationTaskResult] = None
+# class JobStatusResponse(BaseModel):
+#     """Schema for the response when querying the status of a background job."""
+#     job_id: str
+#     status: JobStatus
+#     result: Optional[OptimizationTaskResult] = None
 
-class JobSubmissionResponse(BaseModel):
-    """Schema for the response after successfully submitting a new job."""
-    job_id: str
-    status: JobStatus = JobStatus.RECEIVED
-    message: Optional[str] = "Job submitted successfully."
+# class JobSubmissionResponse(BaseModel):
+#     """Schema for the response after successfully submitting a new job."""
+#     job_id: str
+#     status: JobStatus = JobStatus.RECEIVED
+#     message: Optional[str] = "Job submitted successfully."

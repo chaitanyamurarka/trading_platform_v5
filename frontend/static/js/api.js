@@ -60,16 +60,18 @@ function sendHeartbeat(token) {
  * @param {string} interval - The data interval (e.g., "1m", "1d").
  * @param {string} startTime - The start time in ISO format.
  * @param {string} endTime - The end time in ISO format.
+ * @param {string} timezone - The target timezone for the data.
  * @returns {string} The full API URL for the initial historical data request.
  */
-function getHistoricalDataUrl(sessionToken, exchange, token, interval, startTime, endTime) {
+function getHistoricalDataUrl(sessionToken, exchange, token, interval, startTime, endTime, timezone) {
     const params = new URLSearchParams({
         session_token: sessionToken,
         exchange: exchange,
         token: token,
         interval: interval,
         start_time: startTime,
-        end_time: endTime
+        end_time: endTime,
+        timezone: timezone
     });
     return `${API_BASE_URL}/historical/?${params.toString()}`;
 }

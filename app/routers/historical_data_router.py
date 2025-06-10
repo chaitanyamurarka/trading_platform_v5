@@ -18,6 +18,7 @@ async def fetch_initial_historical_data(
     interval: schemas.Interval = Query(..., description="Data interval (e.g., '1m', '5m', '1d')"),
     start_time: datetime = Query(..., description="Start datetime for the data range (ISO format)"),
     end_time: datetime = Query(..., description="End datetime for the data range (ISO format)"),
+    timezone: str = Query("UTC", description="The timezone for the chart display (e.g., 'America/New_York')."),
 ):
     """
     Retrieve the initial chunk of historical OHLC data from the database.
@@ -27,14 +28,15 @@ async def fetch_initial_historical_data(
     if start_time >= end_time:
         raise HTTPException(status_code=400, detail="start_time must be earlier than end_time")
 
-    # The service function is now called without the background_tasks argument
+    # The service function is now called with the timezone argument
     response = historical_data_service.get_initial_historical_data(
         session_token=session_token,
         exchange=exchange,
         token=token,
         interval_val=interval.value,
         start_time=start_time,
-        end_time=end_time
+        end_time=end_time,
+        timezone=timezone
     )
     return response
 

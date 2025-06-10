@@ -33,58 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let heartbeatIntervalId = null;
 
 
-    // --- NEW Timezone Conversion Function ---
-    /**
-     * Converts a UTC timestamp to a "fake" UTC timestamp that, when displayed as UTC
-     * by the chart, will represent the correct time in the target timezone.
-     * @param {number} utcTimestamp - The original UTC timestamp in seconds.
-     * @param {string} timeZone - The IANA timezone name (e.g., "Asia/Kolkata").
-     * @returns {number} The adjusted timestamp in seconds.
-     */
-    function getZonedTimestamp(utcTimestamp, timeZone) {
-        if (!utcTimestamp || !timeZone) {
-            return utcTimestamp;
-        }
-
-        const date = new Date(utcTimestamp * 1000);
-
-        // Format the date into parts for the target timezone using a robust format
-        const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false,
-        });
-
-        try {
-            const parts = formatter.formatToParts(date);
-            const year = parts.find(p => p.type === 'year')?.value;
-            const month = parts.find(p => p.type === 'month')?.value;
-            const day = parts.find(p => p.type === 'day')?.value;
-            const hour = parts.find(p => p.type === 'hour')?.value;
-            const minute = parts.find(p => p.type === 'minute')?.value;
-            const second = parts.find(p => p.type === 'second')?.value;
-            
-            if (!year || !month || !day || !hour || !minute || !second) {
-                // Fallback for safety, though it should not be reached with en-CA
-                return utcTimestamp; 
-            }
-
-            // Create a new UTC timestamp from these "local" parts
-            const zonedUtcTimestamp = Date.UTC(year, month - 1, day, hour, minute, second);
-
-            return zonedUtcTimestamp / 1000;
-        } catch (e) {
-            console.error("Error formatting date for timezone", e);
-            // Return original timestamp on error
-            return utcTimestamp;
-        }
-    }
-
+    // --- REMOVED Timezone Conversion Function ---
+    // The getZonedTimestamp function is no longer needed as the backend handles this.
 
     async function startSession() {
         try {
@@ -186,10 +136,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // --- Apply timezone conversion to chunk data ---
-            const selectedTimezone = timezoneSelect.value;
-            const chartFormattedData = chunkData.candles.map(item => ({ time: getZonedTimestamp(item.unix_timestamp / 1000, selectedTimezone), open: item.open, high: item.high, low: item.low, close: item.close }));
-            const volumeFormattedData = chunkData.candles.map(item => ({ time: getZonedTimestamp(item.unix_timestamp / 1000, selectedTimezone), value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
+            // --- Use the timestamp directly from the backend ---
+            const chartFormattedData = chunkData.candles.map(item => ({ time: item.unix_timestamp, open: item.open, high: item.high, low: item.low, close: item.close }));
+            const volumeFormattedData = chunkData.candles.map(item => ({ time: item.unix_timestamp, value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
             
             allChartData = [...chartFormattedData, ...allChartData];
             allVolumeData = [...volumeFormattedData, ...allVolumeData];
@@ -216,9 +165,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const changePercent = (latestData.open === 0) ? 0 : (change / latestData.open) * 100;
         const changeClass = change >= 0 ? 'text-success' : 'text-error';
         
-        // --- Corrected Date Formatting ---
-        // latestData.time is already the adjusted "fake" UTC time.
-        // We create a Date object from it and format its UTC components.
+        // --- This formatting is still correct ---
+        // latestData.time is the "fake" UTC timestamp from the backend.
+        // Using getUTC... methods correctly extracts the display components.
         const dateObj = new Date(latestData.time * 1000);
         const year = dateObj.getUTCFullYear();
         const month = (dateObj.getUTCMonth() + 1).toString().padStart(2, '0');
@@ -313,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const interval = intervalSelect.value;
         const selectedTimezone = timezoneSelect.value;
 
-        const apiUrl = getHistoricalDataUrl(sessionToken, exchange, token, interval, startTimeStr, endTimeStr);
+        const apiUrl = getHistoricalDataUrl(sessionToken, exchange, token, interval, startTimeStr, endTimeStr, selectedTimezone);
 
         try {
             const response = await fetch(apiUrl);
@@ -341,10 +290,10 @@ document.addEventListener('DOMContentLoaded', () => {
                  allDataLoaded = true;
             }
 
-            // --- Apply timezone conversion to initial data ---
+            // --- Use the timestamp directly from the backend ---
             const candleData = responseData.candles;
-            allChartData = candleData.map(item => ({ time: getZonedTimestamp(item.unix_timestamp / 1000, selectedTimezone), open: item.open, high: item.high, low: item.low, close: item.close }));
-            allVolumeData = candleData.map(item => ({ time: getZonedTimestamp(item.unix_timestamp / 1000, selectedTimezone), value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
+            allChartData = candleData.map(item => ({ time: item.unix_timestamp, open: item.open, high: item.high, low: item.low, close: item.close }));
+            allVolumeData = candleData.map(item => ({ time: item.unix_timestamp, value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
             
             if (candleSeries) candleSeries.setData(allChartData);
             if (volumeSeries) volumeSeries.setData(allVolumeData);
@@ -373,7 +322,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     autoLoadControls.forEach(control => {
         control.addEventListener('change', () => {
-            // No need to re-apply theme here unless timezone was part of it
             loadInitialChart();
         });
     });

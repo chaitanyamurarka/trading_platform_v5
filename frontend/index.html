@@ -20,6 +20,7 @@
 <body class="bg-base-200">
     <div class="container mx-auto p-4 flex flex-col h-screen">
 
+        <!-- Header -->
         <header class="flex-shrink-0 mb-4">
             <div class="navbar bg-base-100 rounded-box shadow-lg">
                 <div class="flex-1">
@@ -36,7 +37,9 @@
             </div>
         </header>
 
+        <!-- Main Content -->
         <main class="flex-grow flex flex-col">
+            <!-- Controls Toolbar -->
             <div id="controls-toolbar" class="flex flex-wrap items-center gap-2 p-2 bg-base-100 rounded-box shadow-lg mb-4">
                 <select id="exchange" class="select select-bordered select-sm">
                     <option value="NASDAQ" selected>NASDAQ</option>
@@ -69,16 +72,15 @@
                 </select>
                 
                 <select id="chart-type" class="select select-bordered select-sm">
-                    <option value="candlestick">Candlestick</option>
+                    <option value="candlestick" selected>Candlestick</option>
                     <option value="bar">Bar</option>
-                    <option value="line">Line</option>
-                    <option value="area">Area</option>
                 </select>
                 <button id="screenshot-btn" class="btn btn-sm btn-ghost"><i class="fas fa-camera"></i></button>
                 <button class="btn btn-sm btn-ghost" onclick="settings_modal.showModal()"><i class="fas fa-cog"></i></button>
             </div>
 
             <div class="flex-grow flex flex-row">
+                <!-- Vertical Drawing Toolbar -->
                 <div id="drawing-toolbar" class="flex flex-col items-center gap-2 p-2 mr-2 bg-base-100 rounded-box shadow-lg">
                     <button id="tool-trend-line" class="btn btn-sm btn-ghost" title="Trend Line"><i class="fas fa-chart-line"></i></button>
                     <button id="tool-horizontal-line" class="btn btn-sm btn-ghost" title="Horizontal Line"><i class="fas fa-ruler-horizontal"></i></button>
@@ -90,6 +92,7 @@
                     <button id="tool-remove-all" class="btn btn-sm btn-ghost text-error" title="Remove All"><i class="fas fa-trash-alt"></i></button>
                 </div>
 
+                <!-- Chart Container -->
                 <div class="card bg-base-100 shadow-xl rounded-box flex-grow relative">
                     <div id="data-legend" class="absolute top-2 left-2 z-10 p-2 bg-base-200 bg-opacity-70 rounded-md text-xs pointer-events-none hidden"></div>
                     <div id="chartContainer" class="w-full h-full relative">
@@ -106,10 +109,38 @@
 
     <div id="toast-container" class="toast toast-bottom toast-end"></div>
 
+    <!-- Settings Modal -->
     <dialog id="settings_modal" class="modal">
         <div class="modal-box w-11/12 max-w-2xl">
             <h3 class="font-bold text-lg">Chart Settings</h3>
+            <div class="tabs tabs-boxed my-4">
+                <a class="tab tab-active" data-tab="chart-settings-tab">Chart</a>
+                <a class="tab" data-tab="series-settings-tab">Series</a>
             </div>
+            
+            <div class="space-y-4 tab-content" id="chart-settings-tab">
+                <div class="form-control"><label class="label"><span class="label-text">Background Color</span></label><input type="color" id="setting-bg-color" class="input input-sm"></div>
+                <div class="form-control"><label class="label"><span class="label-text">Grid Color</span></label><input type="color" id="setting-grid-color" class="input input-sm"></div>
+                <div class="form-control"><label class="label"><span class="label-text">Watermark Text</span></label><input type="text" id="setting-watermark-text" class="input input-sm input-bordered"></div>
+            </div>
+
+            <div class="space-y-4 tab-content hidden" id="series-settings-tab">
+                <p class="font-bold">Candlestick/Bar Colors</p>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="form-control"><label class="label"><span class="label-text">Up Color</span></label><input type="color" id="setting-up-color" class="input input-sm"></div>
+                    <div class="form-control"><label class="label"><span class="label-text">Down Color</span></label><input type="color" id="setting-down-color" class="input input-sm"></div>
+                    <div class="form-control"><label class="label"><span class="label-text">Wick Up</span></label><input type="color" id="setting-wick-up-color" class="input input-sm"></div>
+                    <div class="form-control"><label class="label"><span class="label-text">Wick Down</span></label><input type="color" id="setting-wick-down-color" class="input input-sm"></div>
+                </div>
+                <div class="divider"></div>
+                <p class="font-bold">Volume Colors</p>
+                 <div class="grid grid-cols-2 gap-4">
+                    <div class="form-control"><label class="label"><span class="label-text">Up Color</span></label><input type="color" id="setting-vol-up-color" class="input input-sm"></div>
+                    <div class="form-control"><label class="label"><span class="label-text">Down Color</span></label><input type="color" id="setting-vol-down-color" class="input input-sm"></div>
+                </div>
+            </div>
+
+        </div>
         <form method="dialog" class="modal-backdrop"><button>close</button></form>
     </dialog>
 

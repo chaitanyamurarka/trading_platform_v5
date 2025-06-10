@@ -1,7 +1,5 @@
-// In frontend/static/js/main.js
-
 document.addEventListener('DOMContentLoaded', () => {
-    // ... (keep all existing variable declarations)
+    // --- HTML Element References ---
     const chartContainer = document.getElementById('chartContainer');
     const exchangeSelect = document.getElementById('exchange');
     const symbolSelect = document.getElementById('symbol');
@@ -13,8 +11,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const loadingIndicator = document.getElementById('loadingIndicator');
     const timezoneSelect = document.getElementById('timezone');
     const scalingSelect = document.getElementById('scaling');
+    const chartTypeSelect = document.getElementById('chart-type');
+    const screenshotBtn = document.getElementById('screenshot-btn');
 
-    // --- NEW: Drawing Tools Toolbar Elements ---
+    // Drawing Tools Toolbar
     const toolTrendLineBtn = document.getElementById('tool-trend-line');
     const toolHorizontalLineBtn = document.getElementById('tool-horizontal-line');
     const toolFibRetracementBtn = document.getElementById('tool-fib-retracement');
@@ -22,356 +22,301 @@ document.addEventListener('DOMContentLoaded', () => {
     const toolBrushBtn = document.getElementById('tool-brush');
     const toolRemoveSelectedBtn = document.getElementById('tool-remove-selected');
     const toolRemoveAllBtn = document.getElementById('tool-remove-all');
-    // --- End of New Elements ---
 
-    let previousScalingMode = scalingSelect.value;
+    // Settings Modal
+    const settingsModal = document.getElementById('settings_modal');
+    const bgColorInput = document.getElementById('setting-bg-color');
+    const gridColorInput = document.getElementById('setting-grid-color');
+    const watermarkInput = document.getElementById('setting-watermark-text');
+    const upColorInput = document.getElementById('setting-up-color');
+    const downColorInput = document.getElementById('setting-down-color');
+    const wickUpColorInput = document.getElementById('setting-wick-up-color');
+    const wickDownColorInput = document.getElementById('setting-wick-down-color');
+    const volUpColorInput = document.getElementById('setting-vol-up-color');
+    const volDownColorInput = document.getElementById('setting-vol-down-color');
 
+    // --- State Variables ---
     let allChartData = [];
     let allVolumeData = [];
     let currentlyFetching = false;
     let allDataLoaded = false;
-
     let chartRequestId = null;
-    let chartTotalAvailable = 0;
     let chartCurrentOffset = 0;
     const DATA_CHUNK_SIZE = 5000;
-
     let mainChart = null;
-    let candleSeries = null;
+    let mainSeries = null;
     let volumeSeries = null;
     let sessionToken = null;
     let heartbeatIntervalId = null;
 
+    // --- Core Functions ---
+
     async function startSession() {
         try {
             const sessionData = await initiateSession();
-            if (sessionData && sessionData.session_token) {
-                sessionToken = sessionData.session_token;
-                console.log(`Session started with token: ${sessionToken}`);
-                showToast(`Session started.`, 'info');
-                loadInitialChart();
-                if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
-                heartbeatIntervalId = setInterval(async () => {
-                    if (sessionToken) {
-                        try {
-                            const heartbeatStatus = await sendHeartbeat(sessionToken);
-                            if (heartbeatStatus.status !== 'ok') {
-                                console.error('Heartbeat failed:', heartbeatStatus.message);
-                                clearInterval(heartbeatIntervalId);
-                                showToast('Session expired. Please reload the page.', 'error');
-                            } else {
-                                console.log('Heartbeat sent successfully.');
-                            }
-                        } catch (e) {
-                            console.error('Error sending heartbeat:', e);
-                            clearInterval(heartbeatIntervalId);
-                            showToast('Connection lost. Please reload.', 'error');
-                        }
-                    }
-                }, 60000);
-            } else {
-                throw new Error("Invalid session data received from server.");
-            }
+            sessionToken = sessionData.session_token;
+            console.log(`Session started with token: ${sessionToken}`);
+            showToast('Session started.', 'info');
+            loadInitialChart();
+            if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
+            heartbeatIntervalId = setInterval(() => {
+                if (sessionToken) sendHeartbeat(sessionToken).catch(e => console.error('Heartbeat failed', e));
+            }, 60000);
         } catch (error) {
             console.error('Failed to initiate session:', error);
-            showToast('Could not start a session. Please check connection and reload.', 'error');
+            showToast('Could not start a session. Please reload.', 'error');
         }
     }
 
-    const getChartTheme = () => {
-        const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
-        return {
-            layout: { background: { type: 'solid', color: isDarkMode ? '#1d232a' : '#ffffff' }, textColor: isDarkMode ? '#a6adba' : '#1f2937', fontFamily: 'Inter, sans-serif' },
-            grid: { vertLines: { color: isDarkMode ? '#2a323c' : '#e5e7eb' }, horzLines: { color: isDarkMode ? '#2a323c' : '#e5e7eb' } },
-            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-            rightPriceScale: { borderColor: isDarkMode ? '#2a323c' : '#e5e7eb' },
-            timeScale: {
-                borderColor: isDarkMode ? '#2a323c' : '#e5e7eb',
-                timeVisible: true,
-                secondsVisible: ['1s', '5s', '10s', '15s', '30s', '45s'].includes(intervalSelect.value),
-            },
-        };
-    };
-
-    const getPriceScaleOptions = () => {
-        const scalingMode = scalingSelect.value;
-        if (scalingMode === 'automatic') {
-            return { autoscale: true, scaleMargins: { top: 0.2, bottom: 0.15 } };
-        } else {
-            return { autoscale: true, scaleMargins: { top: 0, bottom: 0 } };
-        }
-    };
-    
     function initializeCharts() {
         if (mainChart) mainChart.remove();
-        mainChart = LightweightCharts.createChart(chartContainer, getChartTheme());
-        candleSeries = mainChart.addCandlestickSeries({ upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' });
-        mainChart.priceScale('right').applyOptions(getPriceScaleOptions());
-        volumeSeries = mainChart.addHistogramSeries({ color: '#9ca3af', priceFormat: { type: 'volume' }, priceScaleId: '' });
-        mainChart.priceScale('').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+        mainChart = LightweightCharts.createChart(chartContainer, getChartTheme(localStorage.getItem('chartTheme') || 'light'));
+        
+        setupEventListeners();
+        syncSettingsInputs();
+
+        recreateMainSeries(chartTypeSelect.value);
+        volumeSeries = mainChart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: '' });
+        mainChart.priceScale('').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(async (newVisibleRange) => {
             if (!newVisibleRange || currentlyFetching || allDataLoaded || !chartRequestId) return;
-            const lazyLoadThreshold = 10;
-            if (newVisibleRange.from < lazyLoadThreshold) {
-                const nextOffset = chartCurrentOffset - DATA_CHUNK_SIZE;
-                if (nextOffset < 0) {
-                    allDataLoaded = true;
-                    return;
-                }
-                await fetchAndPrependDataChunk(nextOffset);
+            if (newVisibleRange.from < 15) {
+                await fetchAndPrependDataChunk();
             }
         });
     }
-    
-    async function fetchAndPrependDataChunk(offset) {
-        currentlyFetching = true;
-        if (loadingIndicator) loadingIndicator.style.display = 'flex';
-        showToast('Loading older data...', 'info');
-        const apiUrl = getHistoricalDataChunkUrl(chartRequestId, offset, DATA_CHUNK_SIZE);
-        try {
-            const response = await fetch(apiUrl);
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-                throw new Error(`HTTP error ${response.status}: ${errorData.detail || 'Failed to fetch chunk'}`);
-            }
-            const chunkData = await response.json();
-            if (!chunkData || !Array.isArray(chunkData.candles) || chunkData.candles.length === 0) {
-                allDataLoaded = true;
-                console.log("Lazy loading complete: No more older candles returned.");
-                return;
-            }
 
-            const chartFormattedData = chunkData.candles.map(item => ({ time: item.unix_timestamp, open: item.open, high: item.high, low: item.low, close: item.close }));
-            const volumeFormattedData = chunkData.candles.map(item => ({ time: item.unix_timestamp, value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
-            
-            allChartData = [...chartFormattedData, ...allChartData];
-            allVolumeData = [...volumeFormattedData, ...allVolumeData];
-            chartCurrentOffset = chunkData.offset;
-            if (chartCurrentOffset === 0) allDataLoaded = true;
-            if (candleSeries) candleSeries.setData(allChartData);
-            if (volumeSeries) volumeSeries.setData(allVolumeData);
-            showToast(`Older data loaded. Total points: ${allChartData.length}`, 'success');
-        } catch (error) {
-            console.error('Failed to fetch older chart data:', error);
-            showToast(`Error: ${error.message}`, 'error');
+    async function fetchInitialHistoricalData(sessionToken, exchange, token, interval, startTime, endTime, timezone) {
+        const url = getHistoricalDataUrl(sessionToken, exchange, token, interval, startTime, endTime, timezone);
+        const response = await fetch(url);
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Network error' }));
+            throw new Error(error.detail);
+        }
+        return response.json();
+    }
+
+    async function fetchHistoricalChunk(requestId, offset, limit) {
+        const url = getHistoricalDataChunkUrl(requestId, offset, limit);
+        const response = await fetch(url);
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Network error' }));
+            throw new Error(error.detail);
+        }
+        return response.json();
+    }
+
+    async function fetchAndPrependDataChunk() {
+        const nextOffset = chartCurrentOffset - DATA_CHUNK_SIZE;
+        if (nextOffset < 0) { allDataLoaded = true; return; }
+        currentlyFetching = true;
+        loadingIndicator.style.display = 'flex';
+        try {
+            const chunkData = await fetchHistoricalChunk(chartRequestId, nextOffset, DATA_CHUNK_SIZE);
+            if (chunkData && chunkData.candles.length > 0) {
+                const chartFormattedData = chunkData.candles.map(c => ({ time: c.unix_timestamp, open: c.open, high: c.high, low: c.low, close: c.close }));
+                const volumeFormattedData = chunkData.candles.map(c => ({ time: c.unix_timestamp, value: c.volume, color: c.close >= c.open ? volUpColorInput.value + '80' : volDownColorInput.value + '80' }));
+                allChartData = [...chartFormattedData, ...allChartData];
+                allVolumeData = [...volumeFormattedData, ...allVolumeData];
+                mainSeries.setData(allChartData);
+                volumeSeries.setData(allVolumeData);
+                chartCurrentOffset = chunkData.offset;
+                if (chartCurrentOffset === 0) allDataLoaded = true;
+            } else {
+                allDataLoaded = true;
+            }
+        } catch(error) {
+            console.error("Failed to prepend data chunk:", error);
+            showToast("Could not load older data.", "error");
         } finally {
-            if (loadingIndicator) loadingIndicator.style.display = 'none';
+            loadingIndicator.style.display = 'none';
             currentlyFetching = false;
         }
     }
 
-    function updateDataSummary(latestData, symbol, exchange, interval) {
-        if (!latestData) {
-            dataSummaryElement.innerHTML = 'No data to summarize.';
-            return;
+    async function loadInitialChart() {
+        if (!sessionToken) return;
+        currentlyFetching = true;
+        loadingIndicator.style.display = 'flex';
+        allDataLoaded = false;
+
+        try {
+            const responseData = await fetchInitialHistoricalData(sessionToken, exchangeSelect.value, symbolSelect.value, intervalSelect.value, startTimeInput.value, endTimeInput.value, timezoneSelect.value);
+            if (!responseData || !responseData.request_id || responseData.candles.length === 0) {
+                showToast(responseData.message || 'No historical data found.', 'warning');
+                if (mainSeries) mainSeries.setData([]);
+                if (volumeSeries) volumeSeries.setData([]);
+                return;
+            }
+            chartRequestId = responseData.request_id;
+            chartCurrentOffset = responseData.offset;
+            if (chartCurrentOffset === 0 && !responseData.is_partial) allDataLoaded = true;
+
+            allChartData = responseData.candles.map(c => ({ time: c.unix_timestamp, open: c.open, high: c.high, low: c.low, close: c.close }));
+            allVolumeData = responseData.candles.map(c => ({ time: c.unix_timestamp, value: c.volume, color: c.close >= c.open ? volUpColorInput.value + '80' : volDownColorInput.value + '80' }));
+            
+            mainSeries.setData(allChartData);
+            volumeSeries.setData(allVolumeData);
+
+            if (allChartData.length > 0) {
+                const dataSize = allChartData.length;
+                mainChart.timeScale().setVisibleLogicalRange({
+                    from: Math.max(0, dataSize - 100),
+                    to: dataSize - 1,
+                });
+            } else {
+                mainChart.timeScale().fitContent();
+            }
+
+            updateDataSummary(allChartData.at(-1));
+        } catch (error) {
+            console.error('Failed to fetch initial chart data:', error);
+            showToast(`Error: ${error.message}`, 'error');
+        } finally {
+            loadingIndicator.style.display = 'none';
+            currentlyFetching = false;
         }
-        const change = latestData.close - latestData.open;
-        const changePercent = (latestData.open === 0) ? 0 : (change / latestData.open) * 100;
-        const changeClass = change >= 0 ? 'text-success' : 'text-error';
+    }
+    
+    // --- UI and Event Handlers ---
 
-        const dateObj = new Date(latestData.time * 1000);
-        const year = dateObj.getUTCFullYear();
-        const month = (dateObj.getUTCMonth() + 1).toString().padStart(2, '0');
-        const day = dateObj.getUTCDate().toString().padStart(2, '0');
-        const hours = dateObj.getUTCHours().toString().padStart(2, '0');
-        const minutes = dateObj.getUTCMinutes().toString().padStart(2, '0');
-        const seconds = dateObj.getUTCSeconds().toString().padStart(2, '0');
-        const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+    function setupEventListeners() {
+        [exchangeSelect, symbolSelect, intervalSelect, startTimeInput, endTimeInput, timezoneSelect, scalingSelect].forEach(control => control.addEventListener('change', loadInitialChart));
+        themeToggle.addEventListener('click', () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'));
+        screenshotBtn.addEventListener('click', takeScreenshot);
+        chartTypeSelect.addEventListener('change', (e) => recreateMainSeries(e.target.value));
+        window.addEventListener('resize', () => mainChart && mainChart.resize(chartContainer.clientWidth, chartContainer.clientHeight));
 
-        const lastVolumeData = allVolumeData.find(d => d.time === latestData.time);
-        const volume = lastVolumeData ? lastVolumeData.value : 'N/A';
-        dataSummaryElement.innerHTML = `
-            <strong>${symbol} (${exchange}) - ${interval}</strong><br>
-            Last: O: ${latestData.open.toFixed(2)} H: ${latestData.high.toFixed(2)} L: ${latestData.low.toFixed(2)} C: ${latestData.close.toFixed(2)} V: ${volume ? volume.toLocaleString() : 'N/A'}<br>
-            Change: <span class="${changeClass}">${change.toFixed(2)} (${changePercent.toFixed(2)}%)</span><br>
-            Time: ${formattedDate}
-        `;
+        toolTrendLineBtn.addEventListener('click', () => mainChart && mainChart.addLineTool('TrendLine'));
+        toolHorizontalLineBtn.addEventListener('click', () => mainChart && mainChart.addLineTool('HorizontalLine'));
+        toolFibRetracementBtn.addEventListener('click', () => mainChart && mainChart.addLineTool('FibRetracement'));
+        toolRectangleBtn.addEventListener('click', () => mainChart && mainChart.addLineTool('Rectangle'));
+        toolBrushBtn.addEventListener('click', () => mainChart && mainChart.addLineTool('Brush'));
+        toolRemoveSelectedBtn.addEventListener('click', () => mainChart && mainChart.removeSelectedLineTools());
+        toolRemoveAllBtn.addEventListener('click', () => mainChart && mainChart.removeAllLineTools());
+        
+        bgColorInput.addEventListener('input', e => mainChart.applyOptions({ layout: { background: { color: e.target.value } } }));
+        gridColorInput.addEventListener('input', e => mainChart.applyOptions({ grid: { vertLines: { color: e.target.value }, horzLines: { color: e.target.value } } }));
+        watermarkInput.addEventListener('input', e => mainChart.applyOptions({ watermark: { color: 'rgba(150, 150, 150, 0.2)', visible: true, text: e.target.value, fontSize: 48, horzAlign: 'center', vertAlign: 'center' }}));
+        [upColorInput, downColorInput, wickUpColorInput, wickDownColorInput].forEach(input => input.addEventListener('input', applySeriesColors));
+        [volUpColorInput, volDownColorInput].forEach(input => input.addEventListener('input', applyVolumeColors));
+        
+        settingsModal.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', (e) => {
+            settingsModal.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
+            e.currentTarget.classList.add('tab-active');
+            settingsModal.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.getElementById(e.currentTarget.dataset.tab).classList.remove('hidden');
+        }));
+    }
+
+    function recreateMainSeries(type) {
+        if (mainSeries) mainChart.removeSeries(mainSeries);
+        const seriesOptions = getSeriesOptions();
+        switch (type) {
+            case 'bar': mainSeries = mainChart.addBarSeries(seriesOptions); break;
+            case 'line': mainSeries = mainChart.addLineSeries({ color: seriesOptions.upColor }); break;
+            case 'area': mainSeries = mainChart.addAreaSeries({ lineColor: seriesOptions.upColor, topColor: `${seriesOptions.upColor}66`, bottomColor: `${seriesOptions.upColor}00` }); break;
+            default: mainSeries = mainChart.addCandlestickSeries(seriesOptions); break;
+        }
+        if (allChartData.length > 0) mainSeries.setData(allChartData);
+    }
+    
+    function applySeriesColors() {
+        if (!mainSeries) return;
+        mainSeries.applyOptions(getSeriesOptions());
+    }
+
+    function applyVolumeColors() {
+        if (!volumeSeries || !allChartData.length || !allVolumeData.length) return;
+        const priceActionMap = new Map();
+        allChartData.forEach(priceData => {
+            priceActionMap.set(priceData.time, priceData.close >= priceData.open);
+        });
+        const newVolumeData = allVolumeData.map(volumeData => ({
+            ...volumeData,
+            color: priceActionMap.get(volumeData.time) ? volUpColorInput.value + '80' : volDownColorInput.value + '80',
+        }));
+        allVolumeData = newVolumeData;
+        volumeSeries.setData(allVolumeData);
+    }
+
+    function takeScreenshot() {
+        if (!mainChart) return;
+        mainChart.takeScreenshot().then(canvas => {
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL();
+            link.download = `chart-screenshot-${new Date().toISOString()}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    }
+    
+    // --- Helpers and Initializers ---
+
+    function getChartTheme(theme) {
+        const isDarkMode = theme === 'dark';
+        return {
+            layout: { background: { type: 'solid', color: isDarkMode ? '#1d232a' : '#ffffff' }, textColor: isDarkMode ? '#a6adba' : '#1f2937' },
+            grid: { vertLines: { color: isDarkMode ? '#2a323c' : '#e5e7eb' }, horzLines: { color: isDarkMode ? '#2a323c' : '#e5e7eb' } },
+        };
+    }
+    
+    function getSeriesOptions() {
+        return {
+            upColor: upColorInput.value || '#10b981',
+            downColor: downColorInput.value || '#ef4444',
+            wickUpColor: wickUpColorInput.value || '#10b981',
+            wickDownColor: wickDownColorInput.value || '#ef4444',
+            borderVisible: false,
+        };
     }
 
     function applyTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem('chartTheme', theme);
-        if (mainChart) mainChart.applyOptions(getChartTheme());
+        if (mainChart) mainChart.applyOptions(getChartTheme(theme));
+        syncSettingsInputs();
     }
-    
-    themeToggle.addEventListener('click', () => {
-        const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-        applyTheme(newTheme);
-    });
 
-    const savedTheme = localStorage.getItem('chartTheme') || 'light';
-    applyTheme(savedTheme);
-    themeToggle.classList.toggle('swap-active', savedTheme === 'dark');
+    function syncSettingsInputs() {
+        const currentTheme = getChartTheme(localStorage.getItem('chartTheme') || 'light');
+        bgColorInput.value = currentTheme.layout.background.color;
+        gridColorInput.value = currentTheme.grid.vertLines.color;
+        upColorInput.value = '#10b981';
+        downColorInput.value = '#ef4444';
+        wickUpColorInput.value = '#10b981';
+        wickDownColorInput.value = '#ef4444';
+        volUpColorInput.value = '#10b981';
+        volDownColorInput.value = '#ef4444';
+    }
 
-    function setDefaultDateTime() {
-        const now = new Date();
-        const oneMonthAgo = new Date(now);
-        oneMonthAgo.setMonth(now.getMonth() - 1);
-        oneMonthAgo.setHours(0, 0, 0, 0);
-        const endDateTime = new Date(now);
-        endDateTime.setHours(0,0,0,0);
-        const formatForInput = (date) => `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}T00:00`;
-        startTimeInput.value = formatForInput(oneMonthAgo);
-        endTimeInput.value = formatForInput(endDateTime);
+    function updateDataSummary(latestData) {
+        if (!dataSummaryElement || !latestData) return;
+        const change = latestData.close - latestData.open;
+        const changePercent = (change / latestData.open) * 100;
+        dataSummaryElement.innerHTML = `
+            <strong>${symbolSelect.value} (${exchangeSelect.value})</strong> | C: ${latestData.close.toFixed(2)} | H: ${latestData.high.toFixed(2)} | L: ${latestData.low.toFixed(2)} | O: ${latestData.open.toFixed(2)}
+            <span class="${change >= 0 ? 'text-success' : 'text-error'}">(${change.toFixed(2)} / ${changePercent.toFixed(2)}%)</span>`;
     }
     
     function showToast(message, type = 'info') {
         const toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) return;
         const toast = document.createElement('div');
-        toast.className = `alert alert-${type} shadow-lg animate-pulse`;
-        toast.style.animationDuration = '2s';
-        let iconHtml = '';
-        if (type === 'success') iconHtml = '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
-        else if (type === 'error') iconHtml = '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
-        else if (type === 'warning') iconHtml = '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>';
-        else iconHtml = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-info shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
-        toast.innerHTML = `${iconHtml}<span>${message}</span>`;
+        toast.className = `alert alert-${type} shadow-lg`;
+        toast.innerHTML = `<div><span>${message}</span></div>`;
         toastContainer.appendChild(toast);
-        setTimeout(() => {
-            toast.classList.remove('animate-pulse');
-            toast.style.opacity = '0';
-            toast.style.transition = 'opacity 0.5s ease-out';
-            setTimeout(() => toast.remove(), 500);
-        }, 3000);
+        setTimeout(() => toast.remove(), 4000);
     }
     
-    async function loadInitialChart() {
-        if (!sessionToken) {
-            showToast('Waiting for session to start...', 'info');
-            return;
-        }
-
-        const startTimeStr = startTimeInput.value;
-        const endTimeStr = endTimeInput.value;
-
-        if (!startTimeStr || !endTimeStr) {
-            showToast('Start Time and End Time are required.', 'error');
-            return;
-        }
-        
-        allDataLoaded = false;
-        allChartData = [];
-        allVolumeData = [];
-        chartRequestId = null;
-        chartTotalAvailable = 0;
-        chartCurrentOffset = 0;
-        currentlyFetching = true;
-        if (loadingIndicator) loadingIndicator.style.display = 'flex';
-
-        const exchange = exchangeSelect.value;
-        const token = symbolSelect.value;
-        const interval = intervalSelect.value;
-        const selectedTimezone = timezoneSelect.value;
-
-        const apiUrl = getHistoricalDataUrl(sessionToken, exchange, token, interval, startTimeStr, endTimeStr, selectedTimezone);
-
-        try {
-            const response = await fetch(apiUrl);
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-                throw new Error(`HTTP error ${response.status}: ${errorData.detail || 'Failed to fetch data'}`);
-            }
-            
-            const responseData = await response.json();
-
-            if (!responseData || !responseData.request_id || !Array.isArray(responseData.candles) || responseData.candles.length === 0) {
-                const message = responseData.message || 'No historical data available for this range.';
-                showToast(message, 'info');
-                if (candleSeries) candleSeries.setData([]);
-                if (volumeSeries) volumeSeries.setData([]);
-                dataSummaryElement.innerHTML = message;
-                return;
-            }
-
-            chartRequestId = responseData.request_id;
-            chartTotalAvailable = responseData.total_available;
-            chartCurrentOffset = responseData.offset;
-
-            if (chartCurrentOffset === 0 && responseData.is_partial === false) {
-                 allDataLoaded = true;
-            }
-
-            const candleData = responseData.candles;
-            allChartData = candleData.map(item => ({ time: item.unix_timestamp, open: item.open, high: item.high, low: item.low, close: item.close }));
-            allVolumeData = candleData.map(item => ({ time: item.unix_timestamp, value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
-            
-            if (candleSeries) candleSeries.setData(allChartData);
-            if (volumeSeries) volumeSeries.setData(allVolumeData);
-            
-            if (allChartData.length > 0) {
-                const dataSize = allChartData.length;
-                mainChart.timeScale().setVisibleLogicalRange({ from: Math.max(0, dataSize - 100), to: dataSize - 1 });
-            } else {
-                 mainChart.timeScale().fitContent();
-            }
-            
-            updateDataSummary(allChartData.length > 0 ? allChartData[allChartData.length - 1] : null, token, exchange, interval);
-            showToast(responseData.message, 'success');
-
-        } catch (error) {
-            console.error('Failed to fetch initial chart data:', error);
-            showToast(`Error: ${error.message}`, 'error');
-            dataSummaryElement.textContent = `Error loading data: ${error.message}`;
-        } finally {
-            if (loadingIndicator) loadingIndicator.style.display = 'none';
-            currentlyFetching = false;
-        }
-    }
+    // --- Page Load ---
+    const now = new Date();
+    endTimeInput.value = now.toISOString().slice(0, 16);
+    now.setDate(now.getDate() - 30);
+    startTimeInput.value = now.toISOString().slice(0, 16);
     
-    const autoLoadControls = [ exchangeSelect, symbolSelect, intervalSelect, startTimeInput, endTimeInput, timezoneSelect ];
-
-    autoLoadControls.forEach(control => {
-        control.addEventListener('change', () => {
-            loadInitialChart();
-        });
-    });
-
-    scalingSelect.addEventListener('change', () => {
-        const newScalingMode = scalingSelect.value;
-        if (previousScalingMode === 'linear' && newScalingMode === 'automatic') {
-            initializeCharts();
-            loadInitialChart();
-        } else {
-            if (mainChart) {
-                mainChart.priceScale('right').applyOptions(getPriceScaleOptions());
-            }
-        }
-        previousScalingMode = newScalingMode;
-    });
-    
-    // --- NEW: Event Listeners for Drawing Tools ---
-    toolTrendLineBtn.addEventListener('click', () => {
-        if (mainChart) mainChart.addLineTool('TrendLine');
-    });
-
-    toolHorizontalLineBtn.addEventListener('click', () => {
-        if (mainChart) mainChart.addLineTool('HorizontalLine');
-    });
-
-    toolFibRetracementBtn.addEventListener('click', () => {
-        if (mainChart) mainChart.addLineTool('FibRetracement');
-    });
-
-    toolRectangleBtn.addEventListener('click', () => {
-        if (mainChart) mainChart.addLineTool('Rectangle');
-    });
-
-    toolBrushBtn.addEventListener('click', () => {
-        if (mainChart) mainChart.addLineTool('Brush');
-    });
-
-    toolRemoveSelectedBtn.addEventListener('click', () => {
-        if (mainChart) mainChart.removeSelectedLineTools();
-    });
-
-    toolRemoveAllBtn.addEventListener('click', () => {
-        if (mainChart) mainChart.removeAllLineTools();
-    });
-    // --- End of New Event Listeners ---
-
-    window.addEventListener('resize', () => { if (mainChart) mainChart.resize(chartContainer.clientWidth, chartContainer.clientHeight); });
-
-    setDefaultDateTime();
     initializeCharts();
     startSession();
 });

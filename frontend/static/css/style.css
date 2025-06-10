@@ -20,6 +20,21 @@ body {
     overflow: hidden;      /* Prevents the chart from drawing outside the rounded corners */
 }
 
+/* New responsive styles for the controls toolbar */
+#controls-toolbar {
+    justify-content: flex-start;
+}
+
+@media (max-width: 1200px) {
+    #controls-toolbar {
+        /* Allow controls to wrap on smaller screens */
+        flex-basis: 100%;
+        order: 3; /* Move to a new line after title and theme toggle */
+        justify-content: center;
+        margin-top: 0.5rem;
+    }
+}
+
 /**
  * Toast Notification Styling
  * Defines a standard set of styles for toast notifications (pop-up messages).

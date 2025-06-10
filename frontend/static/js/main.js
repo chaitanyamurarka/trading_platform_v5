@@ -1,4 +1,7 @@
+// In frontend/static/js/main.js
+
 document.addEventListener('DOMContentLoaded', () => {
+    // ... (keep all existing variable declarations)
     const chartContainer = document.getElementById('chartContainer');
     const exchangeSelect = document.getElementById('exchange');
     const symbolSelect = document.getElementById('symbol');
@@ -11,7 +14,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const timezoneSelect = document.getElementById('timezone');
     const scalingSelect = document.getElementById('scaling');
 
-    // State variable to track the previous scaling mode
     let previousScalingMode = scalingSelect.value;
 
     let allChartData = [];
@@ -19,7 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentlyFetching = false;
     let allDataLoaded = false;
 
-    // New state variables for pagination
     let chartRequestId = null;
     let chartTotalAvailable = 0;
     let chartCurrentOffset = 0;
@@ -31,6 +32,60 @@ document.addEventListener('DOMContentLoaded', () => {
     let sessionToken = null;
     let heartbeatIntervalId = null;
 
+
+    // --- NEW Timezone Conversion Function ---
+    /**
+     * Converts a UTC timestamp to a "fake" UTC timestamp that, when displayed as UTC
+     * by the chart, will represent the correct time in the target timezone.
+     * @param {number} utcTimestamp - The original UTC timestamp in seconds.
+     * @param {string} timeZone - The IANA timezone name (e.g., "Asia/Kolkata").
+     * @returns {number} The adjusted timestamp in seconds.
+     */
+    function getZonedTimestamp(utcTimestamp, timeZone) {
+        if (!utcTimestamp || !timeZone) {
+            return utcTimestamp;
+        }
+
+        const date = new Date(utcTimestamp * 1000);
+
+        // Format the date into parts for the target timezone using a robust format
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+        });
+
+        try {
+            const parts = formatter.formatToParts(date);
+            const year = parts.find(p => p.type === 'year')?.value;
+            const month = parts.find(p => p.type === 'month')?.value;
+            const day = parts.find(p => p.type === 'day')?.value;
+            const hour = parts.find(p => p.type === 'hour')?.value;
+            const minute = parts.find(p => p.type === 'minute')?.value;
+            const second = parts.find(p => p.type === 'second')?.value;
+            
+            if (!year || !month || !day || !hour || !minute || !second) {
+                // Fallback for safety, though it should not be reached with en-CA
+                return utcTimestamp; 
+            }
+
+            // Create a new UTC timestamp from these "local" parts
+            const zonedUtcTimestamp = Date.UTC(year, month - 1, day, hour, minute, second);
+
+            return zonedUtcTimestamp / 1000;
+        } catch (e) {
+            console.error("Error formatting date for timezone", e);
+            // Return original timestamp on error
+            return utcTimestamp;
+        }
+    }
+
+
     async function startSession() {
         try {
             const sessionData = await initiateSession();
@@ -38,10 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 sessionToken = sessionData.session_token;
                 console.log(`Session started with token: ${sessionToken}`);
                 showToast(`Session started.`, 'info');
-
-                // Load the chart with default values as soon as the session is ready.
                 loadInitialChart();
-
                 if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
                 heartbeatIntervalId = setInterval(async () => {
                     if (sessionToken) {
@@ -72,17 +124,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const getChartTheme = () => {
         const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
-        const selectedTimezone = timezoneSelect.value;
+        // --- REMOVED `timezone` property from here ---
         return {
             layout: { background: { type: 'solid', color: isDarkMode ? '#1d232a' : '#ffffff' }, textColor: isDarkMode ? '#a6adba' : '#1f2937', fontFamily: 'Inter, sans-serif' },
             grid: { vertLines: { color: isDarkMode ? '#2a323c' : '#e5e7eb' }, horzLines: { color: isDarkMode ? '#2a323c' : '#e5e7eb' } },
             crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
             rightPriceScale: { borderColor: isDarkMode ? '#2a323c' : '#e5e7eb' },
-            timeScale: { 
-                borderColor: isDarkMode ? '#2a323c' : '#e5e7eb', 
-                timeVisible: true, 
+            timeScale: {
+                borderColor: isDarkMode ? '#2a323c' : '#e5e7eb',
+                timeVisible: true,
                 secondsVisible: ['1s', '5s', '10s', '15s', '30s', '45s'].includes(intervalSelect.value),
-                timezone: selectedTimezone,
             },
         };
     };
@@ -90,43 +141,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const getPriceScaleOptions = () => {
         const scalingMode = scalingSelect.value;
         if (scalingMode === 'automatic') {
-            return {
-                autoscale: true,
-                scaleMargins: {
-                    top: 0.2,
-                    bottom: 0.15,
-                },
-            };
-        } else { // 'linear'
-            return {
-                autoscale: true,
-                scaleMargins: {
-                    top: 0,
-                    bottom: 0,
-                },
-            };
+            return { autoscale: true, scaleMargins: { top: 0.2, bottom: 0.15 } };
+        } else {
+            return { autoscale: true, scaleMargins: { top: 0, bottom: 0 } };
         }
     };
     
     function initializeCharts() {
         if (mainChart) mainChart.remove();
         mainChart = LightweightCharts.createChart(chartContainer, getChartTheme());
-        
         candleSeries = mainChart.addSeries(LightweightCharts.CandlestickSeries, { upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' });
-        
         mainChart.priceScale('right').applyOptions(getPriceScaleOptions());
-
         volumeSeries = mainChart.addSeries(LightweightCharts.HistogramSeries, { color: '#9ca3af', priceFormat: { type: 'volume' }, priceScaleId: '' });
-        
-        mainChart.priceScale('').applyOptions({ 
-            scaleMargins: { top: 0.8, bottom: 0 }
-        });
-
+        mainChart.priceScale('').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(async (newVisibleRange) => {
-            if (!newVisibleRange || currentlyFetching || allDataLoaded || !chartRequestId) {
-                return;
-            }
-
+            if (!newVisibleRange || currentlyFetching || allDataLoaded || !chartRequestId) return;
             const lazyLoadThreshold = 10;
             if (newVisibleRange.from < lazyLoadThreshold) {
                 const nextOffset = chartCurrentOffset - DATA_CHUNK_SIZE;
@@ -143,38 +172,31 @@ document.addEventListener('DOMContentLoaded', () => {
         currentlyFetching = true;
         if (loadingIndicator) loadingIndicator.style.display = 'flex';
         showToast('Loading older data...', 'info');
-
         const apiUrl = getHistoricalDataChunkUrl(chartRequestId, offset, DATA_CHUNK_SIZE);
-
         try {
             const response = await fetch(apiUrl);
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ detail: response.statusText }));
                 throw new Error(`HTTP error ${response.status}: ${errorData.detail || 'Failed to fetch chunk'}`);
             }
-            
             const chunkData = await response.json();
-            
             if (!chunkData || !Array.isArray(chunkData.candles) || chunkData.candles.length === 0) {
                 allDataLoaded = true;
                 console.log("Lazy loading complete: No more older candles returned.");
                 return;
             }
 
-            const chartFormattedData = chunkData.candles.map(item => ({ time: item.unix_timestamp, open: item.open, high: item.high, low: item.low, close: item.close }));
-            const volumeFormattedData = chunkData.candles.map(item => ({ time: item.unix_timestamp, value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
-
+            // --- Apply timezone conversion to chunk data ---
+            const selectedTimezone = timezoneSelect.value;
+            const chartFormattedData = chunkData.candles.map(item => ({ time: getZonedTimestamp(item.unix_timestamp / 1000, selectedTimezone), open: item.open, high: item.high, low: item.low, close: item.close }));
+            const volumeFormattedData = chunkData.candles.map(item => ({ time: getZonedTimestamp(item.unix_timestamp / 1000, selectedTimezone), value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
+            
             allChartData = [...chartFormattedData, ...allChartData];
             allVolumeData = [...volumeFormattedData, ...allVolumeData];
-
             chartCurrentOffset = chunkData.offset;
-            if (chartCurrentOffset === 0) {
-                allDataLoaded = true;
-            }
-
+            if (chartCurrentOffset === 0) allDataLoaded = true;
             if (candleSeries) candleSeries.setData(allChartData);
             if (volumeSeries) volumeSeries.setData(allVolumeData);
-
             showToast(`Older data loaded. Total points: ${allChartData.length}`, 'success');
         } catch (error) {
             console.error('Failed to fetch older chart data:', error);
@@ -193,8 +215,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const change = latestData.close - latestData.open;
         const changePercent = (latestData.open === 0) ? 0 : (change / latestData.open) * 100;
         const changeClass = change >= 0 ? 'text-success' : 'text-error';
+        
+        // --- Corrected Date Formatting ---
+        // latestData.time is already the adjusted "fake" UTC time.
+        // We create a Date object from it and format its UTC components.
         const dateObj = new Date(latestData.time * 1000);
-        const formattedDate = `${dateObj.getDate().toString().padStart(2, '0')}/${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getFullYear()} ${dateObj.getHours().toString().padStart(2, '0')}:${dateObj.getMinutes().toString().padStart(2, '0')}:${dateObj.getSeconds().toString().padStart(2, '0')}`;
+        const year = dateObj.getUTCFullYear();
+        const month = (dateObj.getUTCMonth() + 1).toString().padStart(2, '0');
+        const day = dateObj.getUTCDate().toString().padStart(2, '0');
+        const hours = dateObj.getUTCHours().toString().padStart(2, '0');
+        const minutes = dateObj.getUTCMinutes().toString().padStart(2, '0');
+        const seconds = dateObj.getUTCSeconds().toString().padStart(2, '0');
+        const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+
         const lastVolumeData = allVolumeData.find(d => d.time === latestData.time);
         const volume = lastVolumeData ? lastVolumeData.value : 'N/A';
         dataSummaryElement.innerHTML = `
@@ -210,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('chartTheme', theme);
         if (mainChart) mainChart.applyOptions(getChartTheme());
     }
-
+    
     themeToggle.addEventListener('click', () => {
         const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
         applyTheme(newTheme);
@@ -224,9 +257,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const now = new Date();
         const oneMonthAgo = new Date(now);
         oneMonthAgo.setMonth(now.getMonth() - 1);
-        oneMonthAgo.setHours(0, 0, 0, 0); 
+        oneMonthAgo.setHours(0, 0, 0, 0);
         const endDateTime = new Date(now);
-        endDateTime.setHours(0,0,0,0); 
+        endDateTime.setHours(0,0,0,0);
         const formatForInput = (date) => `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}T00:00`;
         startTimeInput.value = formatForInput(oneMonthAgo);
         endTimeInput.value = formatForInput(endDateTime);
@@ -278,6 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const exchange = exchangeSelect.value;
         const token = symbolSelect.value;
         const interval = intervalSelect.value;
+        const selectedTimezone = timezoneSelect.value;
 
         const apiUrl = getHistoricalDataUrl(sessionToken, exchange, token, interval, startTimeStr, endTimeStr);
 
@@ -307,19 +341,17 @@ document.addEventListener('DOMContentLoaded', () => {
                  allDataLoaded = true;
             }
 
+            // --- Apply timezone conversion to initial data ---
             const candleData = responseData.candles;
-            allChartData = candleData.map(item => ({ time: item.unix_timestamp, open: item.open, high: item.high, low: item.low, close: item.close }));
-            allVolumeData = candleData.map(item => ({ time: item.unix_timestamp, value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
+            allChartData = candleData.map(item => ({ time: getZonedTimestamp(item.unix_timestamp / 1000, selectedTimezone), open: item.open, high: item.high, low: item.low, close: item.close }));
+            allVolumeData = candleData.map(item => ({ time: getZonedTimestamp(item.unix_timestamp / 1000, selectedTimezone), value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
             
             if (candleSeries) candleSeries.setData(allChartData);
             if (volumeSeries) volumeSeries.setData(allVolumeData);
             
             if (allChartData.length > 0) {
                 const dataSize = allChartData.length;
-                mainChart.timeScale().setVisibleLogicalRange({
-                    from: Math.max(0, dataSize - 100),
-                    to: dataSize - 1,
-                });
+                mainChart.timeScale().setVisibleLogicalRange({ from: Math.max(0, dataSize - 100), to: dataSize - 1 });
             } else {
                  mainChart.timeScale().fitContent();
             }
@@ -337,42 +369,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    const autoLoadControls = [
-        exchangeSelect,
-        symbolSelect,
-        intervalSelect,
-        startTimeInput,
-        endTimeInput,
-        timezoneSelect
-    ];
+    const autoLoadControls = [ exchangeSelect, symbolSelect, intervalSelect, startTimeInput, endTimeInput, timezoneSelect ];
 
     autoLoadControls.forEach(control => {
         control.addEventListener('change', () => {
-            if (mainChart) {
-                mainChart.applyOptions(getChartTheme());
-            }
+            // No need to re-apply theme here unless timezone was part of it
             loadInitialChart();
         });
     });
 
-    // Event listener for scaling options
     scalingSelect.addEventListener('change', () => {
         const newScalingMode = scalingSelect.value;
-
-        // Only perform a full reload when switching from Linear to Automatic.
         if (previousScalingMode === 'linear' && newScalingMode === 'automatic') {
-            // Re-initialize the chart and reload all data.
             initializeCharts();
             loadInitialChart();
         } else {
-            // For all other changes (like Automatic to Linear), just update the
-            // price scale. This keeps the user's zoom and position.
             if (mainChart) {
                 mainChart.priceScale('right').applyOptions(getPriceScaleOptions());
             }
         }
-
-        // Store the new mode as the previous mode for the next change.
         previousScalingMode = newScalingMode;
     });
 

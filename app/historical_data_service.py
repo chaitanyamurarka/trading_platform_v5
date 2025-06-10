@@ -45,7 +45,7 @@ def get_initial_historical_data(
                   |> filter(fn: (r) => r._measurement == "ohlc_{interval_val}")
                   |> filter(fn: (r) => r.symbol == "{token}")
                   |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
-                  |> map(fn: (r) => ({{r with unix_timestamp: float(v: r._time) / 1000000000.0 }}))
+                  |> map(fn: (r) => ({{r with unix_timestamp: float(v: r._time) / 1000000.0 }}))
                   |> sort(columns: ["_time"])
             """
             

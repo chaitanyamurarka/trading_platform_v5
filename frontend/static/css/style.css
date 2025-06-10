@@ -20,16 +20,11 @@ body {
     overflow: hidden;      /* Prevents the chart from drawing outside the rounded corners */
 }
 
-/* New responsive styles for the controls toolbar */
-#controls-toolbar {
-    justify-content: flex-start;
-}
-
+/* New responsive styles for the main controls toolbar */
 @media (max-width: 1200px) {
     #controls-toolbar {
-        /* Allow controls to wrap on smaller screens */
         flex-basis: 100%;
-        order: 3; /* Move to a new line after title and theme toggle */
+        order: 3; 
         justify-content: center;
         margin-top: 0.5rem;
     }
@@ -37,8 +32,6 @@ body {
 
 /**
  * Toast Notification Styling
- * Defines a standard set of styles for toast notifications (pop-up messages).
- * Toasts are used to provide feedback to the user (e.g., success, error, info).
  */
 .toast {
     position: fixed;
@@ -54,13 +47,11 @@ body {
     text-align: center;
 }
 
-/* Controls the visibility of the toast, making it fade in. */
 .toast.show {
     opacity: 1;
 }
 
-/* Color definitions for different types of toasts. */
-.toast-success { background-color: #10b981; } /* Green for success messages */
-.toast-error   { background-color: #ef4444; } /* Red for error messages */
-.toast-warning { background-color: #f59e0b; } /* Amber for warning messages */
-.toast-info    { background-color: #3b82f6; } /* Blue for informational messages */
+.toast-success { background-color: #10b981; }
+.toast-error   { background-color: #ef4444; }
+.toast-warning { background-color: #f59e0b; }
+.toast-info    { background-color: #3b82f6; }

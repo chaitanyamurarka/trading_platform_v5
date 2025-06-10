@@ -14,6 +14,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const timezoneSelect = document.getElementById('timezone');
     const scalingSelect = document.getElementById('scaling');
 
+    // --- NEW: Drawing Tools Toolbar Elements ---
+    const toolTrendLineBtn = document.getElementById('tool-trend-line');
+    const toolHorizontalLineBtn = document.getElementById('tool-horizontal-line');
+    const toolFibRetracementBtn = document.getElementById('tool-fib-retracement');
+    const toolRectangleBtn = document.getElementById('tool-rectangle');
+    const toolBrushBtn = document.getElementById('tool-brush');
+    const toolRemoveSelectedBtn = document.getElementById('tool-remove-selected');
+    const toolRemoveAllBtn = document.getElementById('tool-remove-all');
+    // --- End of New Elements ---
+
     let previousScalingMode = scalingSelect.value;
 
     let allChartData = [];
@@ -31,10 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let volumeSeries = null;
     let sessionToken = null;
     let heartbeatIntervalId = null;
-
-
-    // --- REMOVED Timezone Conversion Function ---
-    // The getZonedTimestamp function is no longer needed as the backend handles this.
 
     async function startSession() {
         try {
@@ -74,7 +80,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const getChartTheme = () => {
         const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
-        // --- REMOVED `timezone` property from here ---
         return {
             layout: { background: { type: 'solid', color: isDarkMode ? '#1d232a' : '#ffffff' }, textColor: isDarkMode ? '#a6adba' : '#1f2937', fontFamily: 'Inter, sans-serif' },
             grid: { vertLines: { color: isDarkMode ? '#2a323c' : '#e5e7eb' }, horzLines: { color: isDarkMode ? '#2a323c' : '#e5e7eb' } },
@@ -100,9 +105,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function initializeCharts() {
         if (mainChart) mainChart.remove();
         mainChart = LightweightCharts.createChart(chartContainer, getChartTheme());
-        candleSeries = mainChart.addSeries(LightweightCharts.CandlestickSeries, { upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' });
+        candleSeries = mainChart.addCandlestickSeries({ upColor: '#10b981', downColor: '#ef4444', borderVisible: false, wickUpColor: '#10b981', wickDownColor: '#ef4444' });
         mainChart.priceScale('right').applyOptions(getPriceScaleOptions());
-        volumeSeries = mainChart.addSeries(LightweightCharts.HistogramSeries, { color: '#9ca3af', priceFormat: { type: 'volume' }, priceScaleId: '' });
+        volumeSeries = mainChart.addHistogramSeries({ color: '#9ca3af', priceFormat: { type: 'volume' }, priceScaleId: '' });
         mainChart.priceScale('').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
         mainChart.timeScale().subscribeVisibleLogicalRangeChange(async (newVisibleRange) => {
             if (!newVisibleRange || currentlyFetching || allDataLoaded || !chartRequestId) return;
@@ -136,7 +141,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // --- Use the timestamp directly from the backend ---
             const chartFormattedData = chunkData.candles.map(item => ({ time: item.unix_timestamp, open: item.open, high: item.high, low: item.low, close: item.close }));
             const volumeFormattedData = chunkData.candles.map(item => ({ time: item.unix_timestamp, value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
             
@@ -164,10 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const change = latestData.close - latestData.open;
         const changePercent = (latestData.open === 0) ? 0 : (change / latestData.open) * 100;
         const changeClass = change >= 0 ? 'text-success' : 'text-error';
-        
-        // --- This formatting is still correct ---
-        // latestData.time is the "fake" UTC timestamp from the backend.
-        // Using getUTC... methods correctly extracts the display components.
+
         const dateObj = new Date(latestData.time * 1000);
         const year = dateObj.getUTCFullYear();
         const month = (dateObj.getUTCMonth() + 1).toString().padStart(2, '0');
@@ -290,7 +291,6 @@ document.addEventListener('DOMContentLoaded', () => {
                  allDataLoaded = true;
             }
 
-            // --- Use the timestamp directly from the backend ---
             const candleData = responseData.candles;
             allChartData = candleData.map(item => ({ time: item.unix_timestamp, open: item.open, high: item.high, low: item.low, close: item.close }));
             allVolumeData = candleData.map(item => ({ time: item.unix_timestamp, value: item.volume, color: item.close > item.open ? 'rgba(16, 185, 129, 0.5)' : 'rgba(239, 68, 68, 0.5)' }));
@@ -338,6 +338,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         previousScalingMode = newScalingMode;
     });
+    
+    // --- NEW: Event Listeners for Drawing Tools ---
+    toolTrendLineBtn.addEventListener('click', () => {
+        if (mainChart) mainChart.addLineTool('TrendLine');
+    });
+
+    toolHorizontalLineBtn.addEventListener('click', () => {
+        if (mainChart) mainChart.addLineTool('HorizontalLine');
+    });
+
+    toolFibRetracementBtn.addEventListener('click', () => {
+        if (mainChart) mainChart.addLineTool('FibRetracement');
+    });
+
+    toolRectangleBtn.addEventListener('click', () => {
+        if (mainChart) mainChart.addLineTool('Rectangle');
+    });
+
+    toolBrushBtn.addEventListener('click', () => {
+        if (mainChart) mainChart.addLineTool('Brush');
+    });
+
+    toolRemoveSelectedBtn.addEventListener('click', () => {
+        if (mainChart) mainChart.removeSelectedLineTools();
+    });
+
+    toolRemoveAllBtn.addEventListener('click', () => {
+        if (mainChart) mainChart.removeAllLineTools();
+    });
+    // --- End of New Event Listeners ---
 
     window.addEventListener('resize', () => { if (mainChart) mainChart.resize(chartContainer.clientWidth, chartContainer.clientHeight); });
 

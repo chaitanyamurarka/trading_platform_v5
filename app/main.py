@@ -55,6 +55,8 @@ static_dir = os.path.join(frontend_dir, "static")
 # A request to '/static/css/style.css' will serve the file from 'frontend/static/css/style.css'.
 if os.path.isdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    app.mount("/dist", StaticFiles(directory=os.path.join(frontend_dir, "dist")), name="dist")
+
     logging.info(f"Mounted static directory: {static_dir}")
 else:
     logging.error(f"Static directory not found at: {static_dir}. Static files will not be served.")

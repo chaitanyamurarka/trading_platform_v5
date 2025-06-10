@@ -29,7 +29,7 @@ const API_BASE_URL = `${API_PROTOCOL}//${API_HOSTNAME}:${API_PORT}`;
  * @returns {Promise<Object>} A promise that resolves to the session data,
  * containing a unique `session_token`.
  */
-function initiateSession() {
+export function initiateSession() {
     return fetch(`${API_BASE_URL}/utils/session/initiate`).then(res => res.json());
 }
 
@@ -39,7 +39,7 @@ function initiateSession() {
  * @param {string} token - The user's current session token.
  * @returns {Promise<Object>} A promise that resolves to the heartbeat status.
  */
-function sendHeartbeat(token) {
+export function sendHeartbeat(token) {
     return fetch(`${API_BASE_URL}/utils/session/heartbeat`, {
         method: 'POST',
         headers: {
@@ -63,7 +63,7 @@ function sendHeartbeat(token) {
  * @param {string} timezone - The target timezone for the data.
  * @returns {string} The full API URL for the initial historical data request.
  */
-function getHistoricalDataUrl(sessionToken, exchange, token, interval, startTime, endTime, timezone) {
+export function getHistoricalDataUrl(sessionToken, exchange, token, interval, startTime, endTime, timezone) {
     const params = new URLSearchParams({
         session_token: sessionToken,
         exchange: exchange,
@@ -85,7 +85,7 @@ function getHistoricalDataUrl(sessionToken, exchange, token, interval, startTime
  * @param {number} [limit=5000] - The number of data points to fetch.
  * @returns {string} The full API URL for fetching a data chunk.
  */
-function getHistoricalDataChunkUrl(requestId, offset, limit = 5000) {
+export function getHistoricalDataChunkUrl(requestId, offset, limit = 5000) {
     const params = new URLSearchParams({
         request_id: requestId,
         offset: offset,

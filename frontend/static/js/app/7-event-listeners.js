@@ -1,7 +1,6 @@
 // frontend/static/js/app/7-event-listeners.js
 import * as elements from './1-dom-elements.js';
 import { state } from './2-state.js';
-// --- MODIFIED: Import the theme functions ---
 import { applyTheme, updateThemeToggleIcon } from './4-ui-helpers.js';
 import { takeScreenshot, recreateMainSeries, applySeriesColors, applyVolumeColors } from './5-chart-drawing.js';
 import { fetchAndPrependDataChunk } from './6-api-service.js';
@@ -25,22 +24,35 @@ export function setupChartObjectListeners() {
 }
 
 export function setupControlListeners(reloadChartCallback) {
-    [elements.exchangeSelect, elements.symbolSelect, elements.intervalSelect, elements.startTimeInput, elements.endTimeInput, elements.timezoneSelect, elements.scalingSelect].forEach(control => {
+    // --- MODIFICATION START ---
+    // The 'scalingSelect' element has been removed from this list to prevent full reloads.
+    [elements.exchangeSelect, elements.symbolSelect, elements.intervalSelect, elements.startTimeInput, elements.endTimeInput, elements.timezoneSelect].forEach(control => {
         control.addEventListener('change', reloadChartCallback);
     });
 
-    // --- MODIFIED: Rewritten theme toggle listener ---
+    // A new, dedicated listener for the scaling select dropdown.
+    elements.scalingSelect.addEventListener('change', (e) => {
+        if (!state.mainChart) return;
+
+        const isAutomatic = e.target.value === 'automatic';
+
+        // Apply the new autoScale value dynamically without reloading the chart.
+        state.mainChart.applyOptions({
+            rightPriceScale: {
+                autoScale: isAutomatic,
+            },
+            leftPriceScale: {
+                autoScale: isAutomatic,
+            }
+        });
+    });
+    // --- MODIFICATION END ---
+
+
     elements.themeToggle.addEventListener('click', (event) => {
-        // Prevent the default browser action for the label, which can cause double events
         event.preventDefault();
-        
-        // Determine the new theme
         const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-        
-        // Apply the new theme to the page and the chart
         applyTheme(newTheme);
-        
-        // Manually update the toggle icon to reflect the new state
         updateThemeToggleIcon();
     });
 

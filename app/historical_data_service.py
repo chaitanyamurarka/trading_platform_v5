@@ -11,7 +11,8 @@ except ImportError:
     from backports import ZoneInfo
 
 from . import schemas
-from .cache import get_cached_ohlc_data, set_cached_ohlc_data
+# Use the new centralized cache key builder
+from .cache import get_cached_ohlc_data, set_cached_ohlc_data, build_ohlc_cache_key, CACHE_EXPIRATION_SECONDS
 from .config import settings
 from influxdb_client import InfluxDBClient
 
@@ -36,18 +37,24 @@ def get_initial_historical_data(
     timezone: str,
 ) -> schemas.HistoricalDataResponse:
     """
-    Main entry point for fetching historical data. It now performs timezone conversion.
+    Main entry point for fetching historical data. It now uses a centralized cache key.
     """
-    # Include the timezone in the request_id to ensure the cache is unique per timezone.
-    request_id = f"chart_data:{session_token}:{exchange}:{token}:{interval_val}:{start_time.isoformat()}:{end_time.isoformat()}:{timezone}"
+    # Use the centralized function to build the cache key
+    request_id = build_ohlc_cache_key(
+        exchange=exchange,
+        token=token,
+        interval=interval_val,
+        start_time_iso=start_time.isoformat(),
+        end_time_iso=end_time.isoformat(),
+        timezone=timezone,
+        session_token=session_token
+    )
     
     full_data = get_cached_ohlc_data(request_id)
     
     if not full_data:
         logging.info(f"Cache MISS for {request_id}. Querying InfluxDB...")
         try:
-            # The Flux query is simplified to just fetch the raw data.
-            # Timestamp conversion is now handled in Python.
             flux_query = f"""
                 from(bucket: "{settings.INFLUX_BUCKET}")
                   |> range(start: {start_time.isoformat()}Z, stop: {end_time.isoformat()}Z)
@@ -70,19 +77,12 @@ def get_initial_historical_data(
             for table in tables:
                 for record in table.records:
                     utc_dt = record.get_time()
-
-                    # Convert original UTC time to the target timezone to get local time components
                     local_dt = utc_dt.astimezone(target_tz)
-                    
-                    # Create a "fake" UTC datetime using local components.
-                    # This is the trick to make lightweight-charts display local time as if it's UTC.
                     fake_utc_dt = datetime(
                         local_dt.year, local_dt.month, local_dt.day,
                         local_dt.hour, local_dt.minute, local_dt.second,
                         tzinfo=dt_timezone.utc
                     )
-                    
-                    # Get the UNIX timestamp from the "fake" UTC datetime.
                     unix_timestamp_for_chart = fake_utc_dt.timestamp()
 
                     full_data.append(schemas.Candle(
@@ -98,8 +98,9 @@ def get_initial_historical_data(
             if not full_data:
                 return schemas.HistoricalDataResponse(candles=[], total_available=0, is_partial=False, message="No data available in InfluxDB for this range.", request_id=None, offset=None)
 
-            set_cached_ohlc_data(request_id, full_data, expiration=3600)
-            logging.info(f"Cache SET for {request_id} with {len(full_data)} records.")
+            # Use the default expiration from the cache module
+            set_cached_ohlc_data(request_id, full_data, expiration=CACHE_EXPIRATION_SECONDS)
+            logging.info(f"Cache SET for {request_id} with {len(full_data)} records for {CACHE_EXPIRATION_SECONDS}s.")
 
         except Exception as e:
             logging.error(f"Error querying InfluxDB or processing data: {e}", exc_info=True)

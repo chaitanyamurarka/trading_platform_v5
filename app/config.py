@@ -6,8 +6,6 @@ from typing import Optional
 load_dotenv()
 
 class Settings(BaseSettings):
-    # ElastiCache for Redis endpoint
-    ELASTICACHE_URL: str = os.getenv("ELASTICACHE_URL", "redis://localhost:6379/0")
 
     # URL for the Redis instance, used for caching and as a Celery message broker/result backend.
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")

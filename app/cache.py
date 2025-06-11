@@ -10,7 +10,7 @@ REDIS_URL = settings.REDIS_URL
 redis_client = redis.Redis.from_url(REDIS_URL)
 
 # Define a cache expiration time for user-specific data (e.g., 35 minutes)
-CACHE_EXPIRATION_SECONDS = 60 * 35
+CACHE_EXPIRATION_SECONDS = 60 * 35 # 35 minutes as a default
 
 def get_cached_ohlc_data(cache_key: str) -> Optional[List[schemas.Candle]]:
     """Attempts to retrieve and deserialize OHLC data from Redis cache."""
@@ -40,17 +40,23 @@ def build_ohlc_cache_key(
     exchange: str,
     token: str,
     interval: str,
-    date_str: str, # Changed from start_time_iso, end_time_iso
+    start_time_iso: str,
+    end_time_iso: str,
+    timezone: str,
     session_token: Optional[str] = None
 ) -> str:
     """
     Builds a consistent cache key for OHLC data queries.
-    For 1s data, the key is now based on the date string (YYYY-MM-DD).
-    For other intervals, it uses the full date string which represents the query range.
+    This now serves as the single source of truth for key generation.
+    It includes the timezone to ensure cache uniqueness per display setting.
     """
-    if session_token and interval == "1s":
-        # User-specific cache key for 1s data, now per-day.
-        return f"user:{session_token}:ohlc:{exchange}:{token}:1s:{date_str}"
+    # Create a unique but readable key by combining the core query parameters.
+    # The session_token is included to keep user data separate.
+    base_key = f"ohlc:{exchange}:{token}:{interval}:{start_time_iso}:{end_time_iso}:{timezone}"
+    
+    if session_token:
+        # User-specific cache key
+        return f"user:{session_token}:{base_key}"
     else:
-        # Generic, shared cache key for aggregated data (uses start_end string).
-        return f"ohlc:{exchange}:{token}:{interval}:{date_str}"
+        # Generic, shared cache key (if applicable in the future)
+        return f"shared:{base_key}"

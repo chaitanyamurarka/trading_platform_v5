@@ -31,21 +31,26 @@ export function setupControlListeners(reloadChartCallback) {
     });
 
     // A new, dedicated listener for the scaling select dropdown.
-    elements.scalingSelect.addEventListener('change', (e) => {
-        if (!state.mainChart) return;
+elements.scalingSelect.addEventListener('click', (e) => {
+    if (!state.mainChart) return;
 
-        const isAutomatic = e.target.value === 'automatic';
+    const selectedValue = e.currentTarget.value;
 
-        // Apply the new autoScale value dynamically without reloading the chart.
+    if (selectedValue === 'automatic') {
+        // If 'Automatic' is clicked (even if it was already selected),
+        // restore the autoScale functionality.
         state.mainChart.applyOptions({
-            rightPriceScale: {
-                autoScale: isAutomatic,
-            },
-            leftPriceScale: {
-                autoScale: isAutomatic,
-            }
+            rightPriceScale: { autoScale: true },
+            leftPriceScale: { autoScale: true }
         });
-    });
+    } else {
+        // Handle other cases like 'Linear' if needed
+        state.mainChart.applyOptions({
+            rightPriceScale: { autoScale: false },
+            leftPriceScale: { autoScale: false }
+        });
+    }
+});
     // --- MODIFICATION END ---
 
 

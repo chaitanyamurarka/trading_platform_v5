@@ -18,9 +18,8 @@
 </head>
 
 <body class="bg-base-200">
-    <div class="container mx-auto p-4 flex flex-col h-screen">
+    <div class="container mx-auto p-2 sm:p-4 flex flex-col h-screen">
 
-        <!-- Header -->
         <header class="flex-shrink-0 mb-4">
             <div class="navbar bg-base-100 rounded-box shadow-lg">
                 <div class="flex-1">
@@ -37,10 +36,8 @@
             </div>
         </header>
 
-        <!-- Main Content -->
         <main class="flex-grow flex flex-col">
-            <!-- Controls Toolbar -->
-            <div id="controls-toolbar" class="flex flex-wrap items-center gap-2 p-2 bg-base-100 rounded-box shadow-lg mb-4">
+            <div id="controls-toolbar" class="flex flex-wrap items-center justify-center sm:justify-start gap-2 p-2 bg-base-100 rounded-box shadow-lg mb-4">
                 <select id="exchange" class="select select-bordered select-sm">
                     <option value="NASDAQ" selected>NASDAQ</option>
                 </select>
@@ -100,20 +97,18 @@
                 <button class="btn btn-sm btn-ghost" onclick="settings_modal.showModal()"><i class="fas fa-cog"></i></button>
             </div>
 
-            <div class="flex-grow flex flex-row">
-                <!-- Vertical Drawing Toolbar -->
-                <div id="drawing-toolbar" class="flex flex-col items-center gap-2 p-2 mr-2 bg-base-100 rounded-box shadow-lg">
+            <div class="flex-grow flex flex-col lg:flex-row">
+                <div id="drawing-toolbar" class="flex flex-row lg:flex-col items-center flex-wrap gap-2 p-2 mb-2 lg:mb-0 lg:mr-2 bg-base-100 rounded-box shadow-lg">
                     <button id="tool-trend-line" class="btn btn-sm btn-ghost" title="Trend Line"><i class="fas fa-chart-line"></i></button>
                     <button id="tool-horizontal-line" class="btn btn-sm btn-ghost" title="Horizontal Line"><i class="fas fa-ruler-horizontal"></i></button>
                     <button id="tool-fib-retracement" class="btn btn-sm btn-ghost" title="Fibonacci Retracement"><i class="fas fa-wave-square"></i></button>
                     <button id="tool-rectangle" class="btn btn-sm btn-ghost" title="Rectangle"><i class="far fa-square"></i></button>
                     <button id="tool-brush" class="btn btn-sm btn-ghost" title="Brush"><i class="fas fa-paint-brush"></i></button>
-                    <div class="divider divider-vertical my-1"></div>
+                    <div class="divider lg:divider-horizontal"></div>
                     <button id="tool-remove-selected" class="btn btn-sm btn-ghost text-error" title="Remove Selected"><i class="fas fa-eraser"></i></button>
                     <button id="tool-remove-all" class="btn btn-sm btn-ghost text-error" title="Remove All"><i class="fas fa-trash-alt"></i></button>
                 </div>
 
-                <!-- Chart Container -->
                 <div class="card bg-base-100 shadow-xl rounded-box flex-grow relative">
                     <div id="data-legend" class="absolute top-2 left-2 z-10 p-2 bg-base-200 bg-opacity-70 rounded-md text-xs pointer-events-none hidden"></div>
                     <div id="chartContainer" class="w-full h-full relative">
@@ -130,7 +125,6 @@
 
     <div id="toast-container" class="toast toast-bottom toast-end"></div>
 
-    <!-- Settings Modal -->
     <dialog id="settings_modal" class="modal">
         <div class="modal-box w-11/12 max-w-2xl">
             <h3 class="font-bold text-lg">Chart Settings</h3>

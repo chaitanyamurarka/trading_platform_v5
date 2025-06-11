@@ -21,21 +21,6 @@ body {
 }
 
 /**
- * Responsive Layout for Controls Toolbar
- * On smaller screens (e.g., large tablets), this media query adjusts the main controls toolbar.
- * It makes the toolbar full-width, moves it below the chart area (`order: 3`), and centers its items
- * to improve usability on narrower viewports.
- */
-@media (max-width: 1200px) {
-    #controls-toolbar {
-        flex-basis: 100%;       /* Ensure the toolbar takes the full width. */
-        order: 3;                /* Change flexbox order to position it after the chart. */
-        justify-content: center; /* Center the control items within the toolbar. */
-        margin-top: 0.5rem;      /* Add some space above the toolbar. */
-    }
-}
-
-/**
  * Toast Notification Base Styling
  * Defines the base appearance and behavior for pop-up notifications (toasts).
  * They are positioned at the bottom-right of the screen and have a fade-in/out transition.

@@ -1,37 +1,46 @@
 /**
- * file: style.css
- * purpose: Provides custom styling for the trading chart application. These styles
- * complement or override the default styles from Tailwind CSS and DaisyUI,
- * focusing on chart-specific and notification elements.
+ * @file style.css
+ * @description Provides custom styling for the trading chart application.
+ * These styles complement or override the defaults from Tailwind CSS and DaisyUI,
+ * focusing on chart-specific elements, responsive layouts, and notifications.
  */
 
-/* Sets a default, modern sans-serif font for the application body. */
+/* Sets a default, modern sans-serif font for better readability across the application. */
 body {
     font-family: 'Inter', sans-serif;
 }
 
 /**
  * Chart Container Styling
- * Ensures the chart container has rounded corners consistent with the UI theme
- * and that the chart itself does not overflow these corners.
+ * Ensures the chart container has rounded corners consistent with the UI theme (DaisyUI's 'rounded-box')
+ * and that the chart canvas itself does not overflow these corners, which would create sharp edges.
  */
 #chartContainer {
-    border-radius: 0.5rem; /* Corresponds to DaisyUI 'rounded-box' class */
-    overflow: hidden;      /* Prevents the chart from drawing outside the rounded corners */
+    border-radius: 0.5rem; /* Corresponds to DaisyUI 'rounded-box' for visual consistency. */
+    overflow: hidden;      /* Prevents the chart from drawing outside the container's rounded corners. */
 }
 
-/* New responsive styles for the main controls toolbar */
+/**
+ * Responsive Layout for Controls Toolbar
+ * On smaller screens (e.g., large tablets), this media query adjusts the main controls toolbar.
+ * It makes the toolbar full-width, moves it below the chart area (`order: 3`), and centers its items
+ * to improve usability on narrower viewports.
+ */
 @media (max-width: 1200px) {
     #controls-toolbar {
-        flex-basis: 100%;
-        order: 3; 
-        justify-content: center;
-        margin-top: 0.5rem;
+        flex-basis: 100%;       /* Ensure the toolbar takes the full width. */
+        order: 3;                /* Change flexbox order to position it after the chart. */
+        justify-content: center; /* Center the control items within the toolbar. */
+        margin-top: 0.5rem;      /* Add some space above the toolbar. */
     }
 }
 
 /**
- * Toast Notification Styling
+ * Toast Notification Base Styling
+ * Defines the base appearance and behavior for pop-up notifications (toasts).
+ * They are positioned at the bottom-right of the screen and have a fade-in/out transition.
+ * Note: These styles are largely superseded by DaisyUI's `alert` component in the final implementation,
+ * but are kept as a fallback or for custom toast scenarios.
  */
 .toast {
     position: fixed;
@@ -40,18 +49,20 @@ body {
     padding: 1rem;
     border-radius: 0.375rem;
     color: white;
-    z-index: 1000;
-    opacity: 0;
-    transition: opacity 0.3s ease-in-out;
+    z-index: 1000;              /* Ensure toasts appear above other content. */
+    opacity: 0;                 /* Initially hidden. */
+    transition: opacity 0.3s ease-in-out; /* Smooth fade effect. */
     min-width: 200px;
     text-align: center;
 }
 
+/* Controls the visibility of the toast. */
 .toast.show {
     opacity: 1;
 }
 
-.toast-success { background-color: #10b981; }
-.toast-error   { background-color: #ef4444; }
-.toast-warning { background-color: #f59e0b; }
-.toast-info    { background-color: #3b82f6; }
+/* Contextual background colors for different toast types. */
+.toast-success { background-color: #10b981; } /* Green for success */
+.toast-error   { background-color: #ef4444; } /* Red for error */
+.toast-warning { background-color: #f59e0b; } /* Yellow for warning */
+.toast-info    { background-color: #3b82f6; } /* Blue for general info */

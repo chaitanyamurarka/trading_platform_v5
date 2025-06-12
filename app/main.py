@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 # Temporily Commenting this
 # from .core import strategy_loader
 # from .services.live_data_feed_service import live_feed_service
-from .routers import historical_data_router, utility_router
+from .routers import historical_data_router, utility_router, live_data_router
 
 # --- Basic Logging Configuration ---
 # Configures logging to output to standard output with a detailed format.
@@ -113,6 +113,7 @@ async def shutdown_event():
 # Include routers from other modules to organize API endpoints.
 app.include_router(historical_data_router.router)
 app.include_router(utility_router.router)
+app.include_router(live_data_router.router)
 # To add the optimization router, uncomment the following lines:
 # from .routers import optimization_router
 # app.include_router(optimization_router.router)

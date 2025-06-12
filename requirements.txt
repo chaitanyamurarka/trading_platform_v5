@@ -7,3 +7,4 @@ pydantic-settings
 pywin32
 numpy
 tzdata
+pandas

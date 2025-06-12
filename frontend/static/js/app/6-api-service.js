@@ -175,3 +175,76 @@ export async function startSession() {
         showToast('Could not start a session. Please reload.', 'error');
     }
 }
+
+// =================================================================
+// --- NEW: FUNCTIONS TO MANAGE LIVE DATA WEBSOCKET ---
+// =================================================================
+
+/**
+ * Disconnects any existing live data WebSocket connection.
+ */
+export function disconnectFromLiveDataFeed() {
+    if (liveDataSocket) {
+        console.log('Closing existing WebSocket connection.');
+        liveDataSocket.close();
+        liveDataSocket = null;
+    }
+}
+
+/**
+ * Connects to the live data WebSocket and sets up message handling.
+ * @param {string} symbol - The symbol to watch.
+ * @param {string} interval - The chart interval.
+ */
+export function connectToLiveDataFeed(symbol, interval) {
+    // Ensure any old connection is closed before starting a new one.
+    disconnectFromLiveDataFeed();
+
+    // Construct the WebSocket URL based on the current window location.
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsURL = `${wsProtocol}//${window.location.host}/ws/live/${symbol}/${interval}`;
+    
+    console.log(`Connecting to WebSocket: ${wsURL}`);
+    showToast(`Connecting to live feed for ${symbol}...`, 'info');
+
+    liveDataSocket = new WebSocket(wsURL);
+
+    liveDataSocket.onopen = () => {
+        console.log('WebSocket connection established.');
+        showToast(`Live feed connected for ${symbol}!`, 'success');
+    };
+
+    liveDataSocket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const { completed_bar, current_bar } = data;
+
+        // The main candlestick series on your chart is in the global state
+        if (state.mainSeries && current_bar) {
+            // The update method intelligently creates a new bar if the timestamp is new,
+            // or updates the last bar if the timestamp is the same.
+            state.mainSeries.update(current_bar);
+            
+            // Update the volume series as well
+            if (state.volumeSeries) {
+                const volumeData = {
+                    time: current_bar.unix_timestamp, // Ensure you use the same timestamp key as the chart
+                    value: current_bar.volume,
+                    color: current_bar.close >= current_bar.open ? elements.volUpColorInput.value + '80' : elements.volDownColorInput.value + '80'
+                };
+                state.volumeSeries.update(volumeData);
+            }
+            // Also update the summary display with the latest data
+            updateDataSummary(current_bar);
+        }
+    };
+
+    liveDataSocket.onclose = () => {
+        console.log('WebSocket connection closed.');
+        showToast('Live feed disconnected.', 'warning');
+    };
+
+    liveDataSocket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        showToast('Live feed connection error.', 'error');
+    };
+}

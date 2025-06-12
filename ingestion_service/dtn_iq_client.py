@@ -7,8 +7,9 @@ It provides a centralized and robust mechanism to:
 1. Launch the IQConnect.exe process if it's not already running.
 2. Continuously check for a stable connection to the client's admin port.
 3. Handle connection errors and re-launch attempts gracefully.
-4. Provide other parts of the application (like data services) with a valid
-   connection object (`HistoryConn`) only when the service is confirmed to be live.
+4. Provide other parts of the application with valid connection objects:
+   - `HistoryConn` for historical data requests.
+   - `QuoteConn` for live streaming data.
 
 This abstraction is critical because IQFeed client can be unstable or may need
 to be started manually, and this module automates that process.
@@ -30,7 +31,7 @@ iqfeed_launch_error = None
 def _check_admin_port_connectivity() -> tuple[bool, str | None]:
     """
     Performs a quick, live check to see if the IQFeed admin port is responsive.
-    
+
     Returns:
         A tuple containing:
         - bool: True if the connection is successful, False otherwise.
@@ -41,7 +42,7 @@ def _check_admin_port_connectivity() -> tuple[bool, str | None]:
         conn_check = iq.AdminConn(name="AdminPortHealthCheck")
         conn_check.connect()
         time.sleep(0.2)  # A brief pause to allow the connection to establish.
-        
+
         # The 'connected' attribute in pyiqfeed confirms connection to DTN servers.
         if conn_check.connected:
             conn_check.disconnect()
@@ -60,7 +61,7 @@ def _check_admin_port_connectivity() -> tuple[bool, str | None]:
 def launch_iqfeed_service_if_needed():
     """
     Ensures the IQFeed client is running and connected.
-    
+
     This function checks for connectivity and, if needed, attempts to launch
     IQConnect.exe using the credentials from the application settings.
     It updates the global state variables based on the outcome.
@@ -117,10 +118,10 @@ def launch_iqfeed_service_if_needed():
 def get_iqfeed_history_conn() -> iq.HistoryConn | None:
     """
     Provides a HistoryConn object for fetching historical data.
-    
+
     This is the primary function that other services should call. It ensures the
     IQFeed service is running before returning a connection object.
-    
+
     Returns:
         An instance of `iq.HistoryConn` if the service is live, otherwise `None`.
     """
@@ -137,4 +138,55 @@ def get_iqfeed_history_conn() -> iq.HistoryConn | None:
             return None
     else:
         logging.error(f"Cannot create HistoryConn: IQFeed service is not running. Last error: {iqfeed_launch_error}")
+        return None
+
+def get_iqfeed_streaming_conn() -> iq.QuoteConn | None:
+    """
+    Provides a QuoteConn object for fetching streaming live data.
+
+    This function ensures the IQFeed service is running before returning a
+    connection object for live tick data.
+
+    Returns:
+        An instance of `iq.QuoteConn` if the service is live, otherwise `None`.
+    """
+    # Always perform a live check before returning a connection.
+    launch_iqfeed_service_if_needed()
+
+    if is_iqfeed_service_launched:
+        try:
+            # CORRECTED: Use QuoteConn for streaming summary data
+            stream_conn = iq.QuoteConn(name="TradingAppStreamConnection")
+            logging.debug("IQFeed QuoteConn instance created.")
+            return stream_conn
+        except Exception as e:
+            logging.error(f"Failed to create IQFeed QuoteConn instance: {e}", exc_info=True)
+            return None
+    else:
+        logging.error(f"Cannot create QuoteConn: IQFeed service is not running. Last error: {iqfeed_launch_error}")
+        return None
+    
+def get_iqfeed_bar_conn() -> iq.BarConn | None:
+    """
+    Provides a BarConn object for fetching streaming bar data.
+
+    This function ensures the IQFeed service is running before returning a
+    connection object for live, interval-based data.
+
+    Returns:
+        An instance of `iq.BarConn` if the service is live, otherwise `None`.
+    """
+    # Always perform a live check before returning a connection.
+    launch_iqfeed_service_if_needed()
+
+    if is_iqfeed_service_launched:
+        try:
+            bar_conn = iq.BarConn(name="TradingAppBarConnection")
+            logging.debug("IQFeed BarConn instance created.")
+            return bar_conn
+        except Exception as e:
+            logging.error(f"Failed to create IQFeed BarConn instance: {e}", exc_info=True)
+            return None
+    else:
+        logging.error(f"Cannot create BarConn: IQFeed service is not running. Last error: {iqfeed_launch_error}")
         return None

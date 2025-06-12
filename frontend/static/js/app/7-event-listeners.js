@@ -3,7 +3,7 @@ import * as elements from './1-dom-elements.js';
 import { state } from './2-state.js';
 import { applyTheme, updateThemeToggleIcon } from './4-ui-helpers.js';
 import { takeScreenshot, recreateMainSeries, applySeriesColors, applyVolumeColors } from './5-chart-drawing.js';
-import { fetchAndPrependDataChunk } from './6-api-service.js';
+import { loadInitialChart, fetchAndPrependDataChunk, connectToLiveDataFeed, disconnectFromLiveDataFeed } from './6-api-service.js'; 
 import { reinitializeAndLoadChart } from '../main.js';
 
 export function setupChartObjectListeners() {
@@ -91,3 +91,51 @@ export function setupControlListeners(reloadChartCallback) {
         document.getElementById(e.currentTarget.dataset.tab).classList.remove('hidden');
     }));
 }
+
+function addEventListeners() {
+    elements.goButton.addEventListener('click', () => {
+        // When "Go" is clicked, always disconnect from any live feed.
+        if (elements.liveToggle.checked) {
+            elements.liveToggle.checked = false;
+        }
+        disconnectFromLiveDataFeed();
+        elements.endTimeInput.disabled = false; // Ensure end time is re-enabled
+        loadInitialChart();
+    });
+
+    // --- NEW: Event listener for the Live Toggle ---
+    elements.liveToggle.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            // --- LIVE MODE ACTIVATED ---
+            console.log("Live mode activated.");
+            // 1. Disable end time input as it's no longer relevant.
+            elements.endTimeInput.disabled = true;
+            
+            // 2. Load the initial chart data. The loadInitialChart function already
+            //    sets the time automatically, which works perfectly for starting a live session.
+            loadInitialChart().then(() => {
+                // 3. After historical data is loaded and displayed, connect to the WebSocket.
+                if (state.sessionToken) { // Only connect if we have a valid session
+                    const symbol = elements.symbolSelect.value;
+                    const interval = elements.intervalSelect.value;
+                    connectToLiveDataFeed(symbol, interval);
+                }
+            });
+            
+        } else {
+            // --- LIVE MODE DEACTIVATED ---
+            console.log("Live mode deactivated.");
+            // 1. Re-enable the end time input.
+            elements.endTimeInput.disabled = false;
+            // 2. Disconnect from the WebSocket feed.
+            disconnectFromLiveDataFeed();
+        }
+    });
+
+    elements.volUpColorInput.addEventListener('change', updateVolumeColors);
+    elements.volDownColorInput.addEventListener('change', updateVolumeColors);
+
+    addScrollListener();
+}
+
+export { addEventListeners };

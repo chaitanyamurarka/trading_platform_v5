@@ -9,19 +9,34 @@ database URLs, API keys, and other service credentials.
 """
 
 import os
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from typing import Optional
-
-# Load environment variables from a .env file if it exists.
-# This is useful for local development.
 from dotenv import load_dotenv
-load_dotenv()
+
+# --- MODIFICATION START ---
+# Build a path to the .env file.
+# Path(__file__) is the path to this config.py file.
+# .parent is the directory it's in (ingestion_service).
+# .parent.parent is the project root (trading_platform_v5).
+# Then we append the .env filename.
+# This makes the path absolute and independent of where the script is run.
+env_path = Path(__file__).parent.parent / ".env"
+
+# Load the .env file from the calculated path if it exists.
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+    print(f"Loaded environment variables from: {env_path}")
+else:
+    print(f"Warning: .env file not found at {env_path}. Using default settings or environment variables.")
+# --- MODIFICATION END ---
+
 
 class Settings(BaseSettings):
     """
     Defines the application's configuration settings.
     Pydantic automatically reads these from environment variables (case-insensitive)
-    or from a .env file.
+    which were loaded by load_dotenv().
     """
     # URL for the Redis instance, used for caching and as a Celery message broker/result backend.
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -31,19 +46,19 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
     # DTN IQFeed Credentials for market data.
-    # These are optional as they might be configured directly in the IQConnect client.
     DTN_PRODUCT_ID: Optional[str] = os.getenv("DTN_PRODUCT_ID")
     DTN_LOGIN: Optional[str] = os.getenv("DTN_LOGIN")
     DTN_PASSWORD: Optional[str] = os.getenv("DTN_PASSWORD")
 
-    INFLUX_URL: str = os.getenv("INFLUX_URL") # e.g., "https://us-east-1-1.aws.cloud2.influxdata.com"
-    INFLUX_TOKEN: str = os.getenv("INFLUX_TOKEN")
-    INFLUX_ORG: str = os.getenv("INFLUX_ORG")
-    INFLUX_BUCKET: str = os.getenv("INFLUX_BUCKET") # Your InfluxDB database/bucket name
+    INFLUX_URL: Optional[str] = os.getenv("INFLUX_URL")
+    INFLUX_TOKEN: Optional[str] = os.getenv("INFLUX_TOKEN")
+    INFLUX_ORG: Optional[str] = os.getenv("INFLUX_ORG")
+    INFLUX_BUCKET: Optional[str] = os.getenv("INFLUX_BUCKET")
 
 
     class Config:
-        # Specifies the name of the environment file to load.
+        # Pydantic can also look for an env file, but we are loading it explicitly above
+        # to ensure the correct path is used.
         env_file = ".env"
         env_file_encoding = 'utf-8'
 

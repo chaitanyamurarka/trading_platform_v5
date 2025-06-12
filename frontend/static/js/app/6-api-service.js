@@ -223,14 +223,24 @@ export function connectToLiveDataFeed(symbol, interval) {
 
         // The main candlestick series on your chart is in the global state
         if (state.mainSeries && current_bar) {
-            // The update method intelligently creates a new bar if the timestamp is new,
-            // or updates the last bar if the timestamp is the same.
-            state.mainSeries.update(current_bar);
+            
+            // --- MODIFICATION START ---
+            // The lightweight-charts library expects the time field to be named 'time'.
+            // We need to map the 'unix_timestamp' from our backend to 'time' for the chart.
+            const chartFormattedBar = {
+                time: current_bar.unix_timestamp,
+                open: current_bar.open,
+                high: current_bar.high,
+                low: current_bar.low,
+                close: current_bar.close
+            };
+            state.mainSeries.update(chartFormattedBar);
+            // --- MODIFICATION END ---
             
             // Update the volume series as well
             if (state.volumeSeries) {
                 const volumeData = {
-                    time: current_bar.unix_timestamp, // Ensure you use the same timestamp key as the chart
+                    time: current_bar.unix_timestamp, 
                     value: current_bar.volume,
                     color: current_bar.close >= current_bar.open ? elements.volUpColorInput.value + '80' : elements.volDownColorInput.value + '80'
                 };
@@ -240,7 +250,7 @@ export function connectToLiveDataFeed(symbol, interval) {
             updateDataSummary(current_bar);
         }
     };
-
+    
     liveDataSocket.onclose = () => {
         console.log('WebSocket connection closed.');
         showToast('Live feed disconnected.', 'warning');

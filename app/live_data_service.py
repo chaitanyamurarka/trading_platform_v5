@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import AsyncGenerator, Dict, Optional
+from typing import AsyncGenerator, Dict, Optional,List
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
@@ -114,6 +114,68 @@ class BarResampler:
         # --- MODIFICATION END ---
         return completed_bar
 
+async def get_cached_intraday_bars(symbol: str, interval: str, timezone_str: str) -> List[schemas.Candle]:
+    """
+    Fetches 1-second bars from the Redis cache, resamples them, and returns them.
+    """
+    cache_key = f"intraday_bars:{symbol}"
+    try:
+        # Fetch all bars from the list
+        cached_bars_str = await redis_client.lrange(cache_key, 0, -1)
+        if not cached_bars_str:
+            return []
+
+        # Deserialize the bars
+        one_sec_bars = [json.loads(b) for b in cached_bars_str]
+        
+        # Resample the bars
+        resampler = BarResampler(interval, timezone_str)
+        resampled_bars = []
+        for bar in one_sec_bars:
+            completed_bar = resampler.add_bar(bar)
+            if completed_bar:
+                resampled_bars.append(completed_bar)
+        
+        return resampled_bars
+
+    except Exception as e:
+        logger.error(f"Error fetching/resampling cached intraday bars for {symbol}: {e}", exc_info=True)
+        return []
+
+
+async def live_data_stream(websocket: WebSocket, symbol: str, interval: str, timezone_str: str):
+    """
+    Handles the WebSocket connection for live data.
+    First sends cached intraday data, then streams live updates.
+    """
+    await websocket.accept()
+
+    # 1. Fetch and send cached intraday data
+    try:
+        cached_bars = await get_cached_intraday_bars(symbol, interval, timezone_str)
+        if cached_bars:
+            # Pydantic models need to be converted to dicts for JSON serialization
+            await websocket.send_json([bar.model_dump() for bar in cached_bars])
+        logger.info(f"Sent {len(cached_bars)} cached bars to client for {symbol}.")
+    except Exception as e:
+        logger.error(f"Failed to send cached data for {symbol}: {e}")
+        # Continue to live data even if cache fails
+
+    # 2. Start streaming live data
+    resampler = BarResampler(interval, timezone_str)
+    
+    async for bar_message in redis_pubsub_generator(symbol):
+        try:
+            completed_bar = resampler.add_bar(bar_message)
+            
+            # Send both the newly completed bar and the latest state of the current bar
+            live_update_payload = {
+                "completed_bar": completed_bar.model_dump() if completed_bar else None,
+                "current_bar": resampler.current_bar.model_dump() if resampler.current_bar else None
+            }
+            await websocket.send_json(live_update_payload)
+        except Exception as e:
+            logger.error(f"Error processing live bar for {symbol}: {e}")
 
 async def redis_pubsub_generator(symbol: str) -> AsyncGenerator[Dict, None]:
     """

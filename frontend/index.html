@@ -37,70 +37,74 @@
         </header>
 
         <main class="flex-grow flex flex-col">
-            <div id="controls-toolbar" class="flex flex-wrap items-center justify-center sm:justify-start gap-2 p-2 bg-base-100 rounded-box shadow-lg mb-4">
-                <select id="exchange" class="select select-bordered select-sm">
-                    <option value="NASDAQ" selected>NASDAQ</option>
-                </select>
-                <select id="symbol" class="select select-bordered select-sm">
-                    <option value="AAPL" selected>AAPL</option>
-                    <option value="AMZN">AMZN</option>
-                    <option value="TSLA">TSLA</option>
-                    <option value="@NQ#">@NQ# (Futures)</option>
-                </select>
-                <select id="interval" class="select select-bordered select-sm">
-                        <option value="1s">1 Second</option>
-                        <option value="5s">5 Seconds</option>
-                        <option value="10s">10 Seconds</option>
-                        <option value="15s">15 Seconds</option>
-                        <option value="30s">30 Seconds</option>
-                        <option value="45s">45 Seconds</option>
-                        <option value="1m" selected>1 Minute</option>
-                        <option value="5m">5 Minutes</option>
-                        <option value="10m">10 Minutes</option>
-                        <option value="15m">15 Minutes</option>
-                        <option value="30m">30 Minutes</option>
-                        <option value="45m">45 Minutes</option>
-                        <option value="1h">1 Hour</option>
-                        <option value="1d">1 Day</option>
-                </select>
-                <input id="start_time" type="datetime-local" class="input input-bordered input-sm">
-                <input id="end_time" type="datetime-local" class="input input-bordered input-sm">
-                <div class="form-group">
-                    <label for="live-toggle">Live Data</label>
-                    <input type="checkbox" id="live-toggle">
-                </div>
-                <select id="timezone" class="select select-bordered select-sm">
-                    <option value="Etc/UTC">UTC</option>
-                    <option value="Europe/London">London</option>
-                    <option value="Europe/Paris">Paris</option>
-                    <option value="Europe/Berlin">Berlin</option>
-                    <option value="Europe/Moscow">Moscow</option>
-                    <option value="Asia/Dubai">Dubai</option>
-                    <option value="Asia/Kolkata">Kolkata</option>
-                    <option value="Asia/Singapore">Singapore</option>
-                    <option value="Asia/Hong_Kong">Hong Kong</option>
-                    <option value="Asia/Tokyo">Tokyo</option>
-                    <option value="Australia/Sydney">Sydney</option>
-                    <option value="America/New_York" selected>New York</option>
-                    <option value="America/Chicago">Chicago</option>
-                    <option value="America/Los_Angeles">Los Angeles</option>
-                    <option value="America/Toronto">Toronto</option>
-                    <option value="America/Sao_Paulo">Sao Paulo</option>
-                    <option value="Pacific/Honolulu">Honolulu</option>
-                </select>
-                <div class="join">
-                    <button id="scaling-auto-btn" class="btn btn-sm join-item btn-active" title="Automatic Scaling">Auto</button>
-                    <button id="scaling-linear-btn" class="btn btn-sm join-item" title="Linear Scaling">Linear</button>
-                </div>
-                
-                <select id="chart-type" class="select select-bordered select-sm">
-                    <option value="candlestick" selected>Candlestick</option>
-                    <option value="bar">Bar</option>
-                </select>
-                <button id="screenshot-btn" class="btn btn-sm btn-ghost"><i class="fas fa-camera"></i></button>
-                <button class="btn btn-sm btn-ghost" onclick="settings_modal.showModal()"><i class="fas fa-cog"></i></button>
+        <div id="controls-toolbar" class="flex flex-wrap items-center justify-center sm:justify-start gap-2 p-2 bg-base-100 rounded-box shadow-lg mb-4">
+            <select id="exchange" class="select select-bordered select-sm">
+                <option value="NASDAQ" selected>NASDAQ</option>
+            </select>
+            <select id="symbol" class="select select-bordered select-sm">
+                <option value="AAPL" selected>AAPL</option>
+                <option value="AMZN">AMZN</option>
+                <option value="TSLA">TSLA</option>
+                <option value="@NQ#">@NQ# (Futures)</option>
+            </select>
+            <select id="interval" class="select select-bordered select-sm">
+                    <option value="1s">1 Second</option>
+                    <option value="5s">5 Seconds</option>
+                    <option value="10s">10 Seconds</option>
+                    <option value="15s">15 Seconds</option>
+                    <option value="30s">30 Seconds</option>
+                    <option value="45s">45 Seconds</option>
+                    <option value="1m" selected>1 Minute</option>
+                    <option value="5m">5 Minutes</option>
+                    <option value="10m">10 Minutes</option>
+                    <option value="15m">15 Minutes</option>
+                    <option value="30m">30 Minutes</option>
+                    <option value="45m">45 Minutes</option>
+                    <option value="1h">1 Hour</option>
+                    <option value="1d">1 Day</option>
+            </select>
+            <input id="start_time" type="datetime-local" class="input input-bordered input-sm">
+            <input id="end_time" type="datetime-local" class="input input-bordered input-sm">
+            
+            <button id="go-btn" class="btn btn-sm btn-primary">Go</button>
+            
+            <div class="form-control flex flex-row items-center">
+                <label for="live-toggle" class="label cursor-pointer">
+                <span class="label-text mr-2">Live</span> 
+                <input type="checkbox" id="live-toggle" class="toggle toggle-sm toggle-primary">
+                </label>
             </div>
-
+            <select id="timezone" class="select select-bordered select-sm">
+                <option value="Etc/UTC">UTC</option>
+                <option value="Europe/London">London</option>
+                <option value="Europe/Paris">Paris</option>
+                <option value="Europe/Berlin">Berlin</option>
+                <option value="Europe/Moscow">Moscow</option>
+                <option value="Asia/Dubai">Dubai</option>
+                <option value="Asia/Kolkata">Kolkata</option>
+                <option value="Asia/Singapore">Singapore</option>
+                <option value="Asia/Hong_Kong">Hong Kong</option>
+                <option value="Asia/Tokyo">Tokyo</option>
+                <option value="Australia/Sydney">Sydney</option>
+                <option value="America/New_York" selected>New York</option>
+                <option value="America/Chicago">Chicago</option>
+                <option value="America/Los_Angeles">Los Angeles</option>
+                <option value="America/Toronto">Toronto</option>
+                <option value="America/Sao_Paulo">Sao Paulo</option>
+                <option value="Pacific/Honolulu">Honolulu</option>
+            </select>
+            <div class="join">
+                <button id="scaling-auto-btn" class="btn btn-sm join-item btn-active" title="Automatic Scaling">Auto</button>
+                <button id="scaling-linear-btn" class="btn btn-sm join-item" title="Linear Scaling">Linear</button>
+            </div>
+            
+            <select id="chart-type" class="select select-bordered select-sm">
+                <option value="candlestick" selected>Candlestick</option>
+                <option value="bar">Bar</option>
+            </select>
+            <button id="screenshot-btn" class="btn btn-sm btn-ghost"><i class="fas fa-camera"></i></button>
+            <button class="btn btn-sm btn-ghost" onclick="settings_modal.showModal()"><i class="fas fa-cog"></i></button>
+        </div>
             <div class="flex-grow flex flex-col lg:flex-row">
                 <div id="drawing-toolbar" class="flex flex-row lg:flex-col items-center flex-wrap gap-2 p-2 mb-2 lg:mb-0 lg:mr-2 bg-base-100 rounded-box shadow-lg">
                     <button id="tool-trend-line" class="btn btn-sm btn-ghost" title="Trend Line"><i class="fas fa-chart-line"></i></button>

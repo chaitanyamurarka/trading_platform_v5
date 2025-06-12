@@ -1,4 +1,4 @@
-// app/1-dom-elements.js
+// frontend/static/js/app/1-dom-elements.js
 export const chartContainer = document.getElementById('chartContainer');
 export const exchangeSelect = document.getElementById('exchange');
 export const symbolSelect = document.getElementById('symbol');
@@ -9,9 +9,12 @@ export const themeToggle = document.getElementById('theme-toggle');
 export const dataSummaryElement = document.getElementById('dataSummary');
 export const loadingIndicator = document.getElementById('loadingIndicator');
 export const timezoneSelect = document.getElementById('timezone');
-// export const scalingSelect = document.getElementById('scaling');
 export const chartTypeSelect = document.getElementById('chart-type');
 export const screenshotBtn = document.getElementById('screenshot-btn');
+
+// ADD THESE TWO LINES
+export const goButton = document.getElementById('go-btn');
+export const liveToggle = document.getElementById('live-toggle');
 
 // Drawing Tools Toolbar
 export const toolTrendLineBtn = document.getElementById('tool-trend-line');

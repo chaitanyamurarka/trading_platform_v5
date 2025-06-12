@@ -4,6 +4,9 @@ import { state, constants } from './2-state.js';
 import * as elements from './1-dom-elements.js';
 import { showToast, updateDataSummary } from './4-ui-helpers.js';
 
+// ADD THIS LINE AT THE TOP OF THE FILE
+let liveDataSocket = null;
+
 // This function now returns the fetched data
 async function fetchInitialHistoricalData(sessionToken, exchange, token, interval, startTime, endTime, timezone) {
     const url = getHistoricalDataUrl(sessionToken, exchange, token, interval, startTime, endTime, timezone);

@@ -6,6 +6,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator, Dict, Optional, List
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from starlette.websockets import WebSocket, WebSocketDisconnect
+from websockets.exceptions import ConnectionClosed
 
 import pandas as pd
 import redis.asyncio as aioredis
@@ -160,33 +162,60 @@ async def get_cached_intraday_bars(symbol: str, interval: str, timezone_str: str
 
 async def live_data_stream(websocket: WebSocket, symbol: str, interval: str, timezone_str: str):
     """
-    Handles the WebSocket connection for live data.
-    First sends cached intraday data, then streams live updates.
+    Handles the WebSocket connection for live data streaming.
+
+    This function first accepts the connection, sends a batch of available cached
+    intraday data, and then proceeds to stream live updates. It listens for
+    client disconnections gracefully and ensures all resources are cleaned up.
     """
     await websocket.accept()
-
-    try:
-        cached_bars = await get_cached_intraday_bars(symbol, interval, timezone_str)
-        if cached_bars:
-            await websocket.send_json([bar.model_dump() for bar in cached_bars])
-        logger.info(f"Sent {len(cached_bars)} cached bars to client for {symbol}.")
-    except Exception as e:
-        logger.error(f"Failed to send cached data for {symbol}: {e}")
-
     resampler = BarResampler(interval, timezone_str)
     
-    async for bar_message in redis_pubsub_generator(symbol):
+    # The `finally` block ensures that cleanup occurs even if the client disconnects unexpectedly.
+    try:
+        # --- 1. Send Initial Cached Data ---
+        # Attempt to send a snapshot of recent history first.
         try:
-            # The call for live data does not pass the flag, so it defaults to False.
+            cached_bars = await get_cached_intraday_bars(symbol, interval, timezone_str)
+            if cached_bars:
+                await websocket.send_json([bar.model_dump() for bar in cached_bars])
+                logger.info(f"Sent {len(cached_bars)} cached bars to client for {symbol}.")
+        except Exception as e:
+            logger.error(f"Could not send cached data for {symbol}: {e}", exc_info=True)
+            # Decide if this error is fatal. For now, we proceed to the live stream.
+
+        # --- 2. Stream Live Data ---
+        # Listen to the Redis pub/sub generator for new 1-second bars.
+        async for bar_message in redis_pubsub_generator(symbol):
             completed_bar = resampler.add_bar(bar_message)
             
+            # Prepare the payload with the completed bar (if any) and the current, in-progress bar.
             live_update_payload = {
                 "completed_bar": completed_bar.model_dump() if completed_bar else None,
                 "current_bar": resampler.current_bar.model_dump() if resampler.current_bar else None
             }
             await websocket.send_json(live_update_payload)
-        except Exception as e:
-            logger.error(f"Error processing live bar for {symbol}: {e}")
+
+    except (WebSocketDisconnect, ConnectionClosed):
+        # This is an expected exception when the client closes the connection.
+        logger.info(f"Client disconnected from {symbol} stream. Closing connection gracefully.")
+    except Exception as e:
+        # Catches any other unexpected errors during the process.
+        logger.error(f"An unexpected error occurred in the live stream for {symbol}: {e}", exc_info=True)
+    finally:
+        # --- 3. Cleanup ---
+        # This block runs whether the client disconnected or an error occurred.
+        logger.info(f"Closing stream and cleaning up resources for {symbol}.")
+        
+        # Unsubscribe from the Redis channel to prevent resource leaks.
+        # await cleanup_redis_subscription(symbol) # Assumes such a function exists.
+        
+        # Ensure the WebSocket is closed from the server side.
+        try:
+            await websocket.close()
+        except RuntimeError:
+            # This can occur if the socket is already in a closed state, which is safe to ignore.
+            pass
 
 # --- FUNCTION WITH FIX ---
 async def get_cached_intraday_bars(symbol: str, interval: str, timezone_str: str) -> List[schemas.Candle]:

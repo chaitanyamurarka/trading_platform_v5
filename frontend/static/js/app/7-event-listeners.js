@@ -29,16 +29,16 @@ export function setupControlListeners(reloadChartCallback) {
         control.addEventListener('change', reloadChartCallback);
     });
 
-    // --- Go Button Listener ---
-    elements.goButton.addEventListener('click', () => {
-        // When "Go" is clicked, always disconnect from any live feed.
-        if (elements.liveToggle.checked) {
-            elements.liveToggle.checked = false;
-        }
-        disconnectFromLiveDataFeed();
-        elements.endTimeInput.disabled = false; // Ensure end time is re-enabled
-        loadInitialChart();
-    });
+    // // --- Go Button Listener ---
+    // elements.goButton.addEventListener('click', () => {
+    //     // When "Go" is clicked, always disconnect from any live feed.
+    //     if (elements.liveToggle.checked) {
+    //         elements.liveToggle.checked = false;
+    //     }
+    //     disconnectFromLiveDataFeed();
+    //     elements.endTimeInput.disabled = false; // Ensure end time is re-enabled
+    //     loadInitialChart();
+    // });
 
     // --- Live Toggle Listener ---
     elements.liveToggle.addEventListener('change', (e) => {

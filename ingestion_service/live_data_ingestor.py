@@ -39,7 +39,6 @@ class LiveTickListener(iq.SilentQuoteListener):
         """
         logging.info(f"Backfilling intraday data for {symbol}...")
         try:
-            # The HistoryConn is now managed by the ConnConnector in main()
             today_data = hist_conn.request_bars_for_days(
                 ticker=symbol,
                 interval_len=1,
@@ -53,12 +52,21 @@ class LiveTickListener(iq.SilentQuoteListener):
                 self.redis_client.delete(cache_key)
                 
                 for bar in today_data:
-                    # The 'time' field from historical data is a numpy.timedelta64
-                    # representing the time since midnight. We combine it with the date.
-                    bar_datetime = bar['date'] + bar['time']
+                    # --- FIX START: Correct Timezone Handling ---
+                    # 1. Combine date and time from IQFeed to get a naive datetime.
+                    #    This represents the time in the exchange's timezone (America/New_York).
+                    naive_bar_datetime = (bar['date'] + bar['time']).astype(datetime)
                     
+                    # 2. Make the naive datetime object timezone-aware by assigning the source timezone.
+                    aware_bar_datetime = naive_bar_datetime.replace(tzinfo=self.source_timezone)
+                    
+                    # 3. Convert the timezone-aware datetime into a standard UTC timestamp.
+                    #    This matches the logic used for live data processing.
+                    utc_timestamp = int(aware_bar_datetime.timestamp())
+                    # --- FIX END ---
+
                     bar_data = {
-                        "timestamp": int(bar_datetime.astype(datetime).replace().timestamp()),
+                        "timestamp": utc_timestamp, # Use the corrected UTC timestamp
                         "open": float(bar['open_p']),
                         "high": float(bar['high_p']),
                         "low": float(bar['low_p']),

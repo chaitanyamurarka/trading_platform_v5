@@ -24,23 +24,41 @@ export function setupChartObjectListeners() {
 }
 
 export function setupControlListeners(reloadChartCallback) {
-    // --- Main controls that trigger a full chart reload ---
-    [elements.exchangeSelect, elements.symbolSelect, elements.intervalSelect, elements.startTimeInput, elements.endTimeInput, elements.timezoneSelect].forEach(control => {
-        control.addEventListener('change', reloadChartCallback);
+    // --- MODIFIED: Listeners are now aware of the "Live" toggle state ---
+
+    // Handle changes for controls that define the chart's main context
+    [elements.exchangeSelect, elements.symbolSelect, elements.intervalSelect].forEach(control => {
+        control.addEventListener('change', () => {
+            if (elements.liveToggle.checked) {
+                // If in live mode, perform a live-aware reload: fetch new data and reconnect the websocket
+                loadInitialChart().then(() => {
+                    if (state.sessionToken) {
+                        const symbol = elements.symbolSelect.value;
+                        const interval = elements.intervalSelect.value;
+                        connectToLiveDataFeed(symbol, interval);
+                    }
+                });
+            } else {
+                // If not in live mode, perform a standard full reload
+                reloadChartCallback();
+            }
+        });
     });
 
-    // // --- Go Button Listener ---
-    // elements.goButton.addEventListener('click', () => {
-    //     // When "Go" is clicked, always disconnect from any live feed.
-    //     if (elements.liveToggle.checked) {
-    //         elements.liveToggle.checked = false;
-    //     }
-    //     disconnectFromLiveDataFeed();
-    //     elements.endTimeInput.disabled = false; // Ensure end time is re-enabled
-    //     loadInitialChart();
-    // });
+    // Handle changes for time-related controls, which should disable live mode
+    [elements.startTimeInput, elements.endTimeInput, elements.timezoneSelect].forEach(control => {
+        control.addEventListener('change', () => {
+            if (elements.liveToggle.checked) {
+                // Unchecking the toggle will fire its own 'change' event,
+                // which correctly handles disconnecting the live feed.
+                elements.liveToggle.checked = false;
+            }
+            // Proceed with a standard reload for the new time range
+            reloadChartCallback();
+        });
+    });
 
-    // --- Live Toggle Listener ---
+    // --- Live Toggle Listener (Unchanged) ---
     elements.liveToggle.addEventListener('change', (e) => {
         if (e.target.checked) {
             // LIVE MODE ACTIVATED
@@ -58,7 +76,8 @@ export function setupControlListeners(reloadChartCallback) {
             disconnectFromLiveDataFeed();
         }
     });
-    // --- New scaling buttons ---
+
+    // --- Scaling, UI, and other listeners (Unchanged) ---
     const autoScaleBtn = document.getElementById('scaling-auto-btn');
     const linearScaleBtn = document.getElementById('scaling-linear-btn');
 
@@ -86,7 +105,6 @@ export function setupControlListeners(reloadChartCallback) {
         });
     }
 
-    // --- Other UI controls ---
     elements.themeToggle.addEventListener('click', (event) => {
         event.preventDefault();
         const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -97,7 +115,6 @@ export function setupControlListeners(reloadChartCallback) {
     elements.screenshotBtn.addEventListener('click', takeScreenshot);
     elements.chartTypeSelect.addEventListener('change', (e) => recreateMainSeries(e.target.value));
 
-    // --- Drawing tools ---
     elements.toolTrendLineBtn.addEventListener('click', () => state.mainChart && state.mainChart.addLineTool('TrendLine'));
     elements.toolHorizontalLineBtn.addEventListener('click', () => state.mainChart && state.mainChart.addLineTool('HorizontalLine'));
     elements.toolFibRetracementBtn.addEventListener('click', () => state.mainChart && state.mainChart.addLineTool('FibRetracement'));
@@ -106,7 +123,6 @@ export function setupControlListeners(reloadChartCallback) {
     elements.toolRemoveSelectedBtn.addEventListener('click', () => state.mainChart && state.mainChart.removeSelectedLineTools());
     elements.toolRemoveAllBtn.addEventListener('click', () => state.mainChart && state.mainChart.removeAllLineTools());
 
-    // --- Settings Modal ---
     elements.bgColorInput.addEventListener('input', e => state.mainChart.applyOptions({ layout: { background: { color: e.target.value } } }));
     elements.gridColorInput.addEventListener('input', e => state.mainChart.applyOptions({ grid: { vertLines: { color: e.target.value }, horzLines: { color: e.target.value } } }));
     elements.watermarkInput.addEventListener('input', e => state.mainChart.applyOptions({ watermark: { color: 'rgba(150, 150, 150, 0.2)', visible: true, text: e.target.value, fontSize: 48, horzAlign: 'center', vertAlign: 'center' }}));

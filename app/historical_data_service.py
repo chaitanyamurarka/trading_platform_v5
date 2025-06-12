@@ -8,7 +8,7 @@ from fastapi import HTTPException
 try:
     from zoneinfo import ZoneInfo
 except ImportError:
-    from backports import ZoneInfo
+    from backports.zoneinfo import ZoneInfo
 
 from . import schemas
 # Use the new centralized cache key builder
@@ -37,8 +37,29 @@ def get_initial_historical_data(
     timezone: str,
 ) -> schemas.HistoricalDataResponse:
     """
-    Main entry point for fetching historical data. It now uses a centralized cache key.
+    Main entry point for fetching historical data. It now correctly handles timezones for queries.
     """
+    # =================================================================
+    # --- NEW FIX: Make naive datetimes from the request timezone-aware ---
+    # =================================================================
+    try:
+        # The timezone provided by the client (e.g., 'America/New_York')
+        client_tz = ZoneInfo(timezone)
+    except Exception:
+        logging.warning(f"Invalid timezone '{timezone}' provided by client. Defaulting to UTC.")
+        client_tz = ZoneInfo("UTC")
+
+    # The incoming start_time and end_time from FastAPI are naive.
+    # We must first make them "aware" of the client's timezone, then convert
+    # them to UTC for the InfluxDB query.
+    start_time_aware = start_time.replace(tzinfo=client_tz)
+    end_time_aware = end_time.replace(tzinfo=client_tz)
+
+    start_time_utc = start_time_aware.astimezone(dt_timezone.utc)
+    end_time_utc = end_time_aware.astimezone(dt_timezone.utc)
+    # --- END FIX ---
+
+
     # Use the centralized function to build the cache key
     request_id = build_ohlc_cache_key(
         exchange=exchange,
@@ -55,9 +76,10 @@ def get_initial_historical_data(
     if not full_data:
         logging.info(f"Cache MISS for {request_id}. Querying InfluxDB...")
         try:
+            # Use the corrected UTC-aware datetimes in the query, formatting to ISO 8601 with 'Z'
             flux_query = f"""
                 from(bucket: "{settings.INFLUX_BUCKET}")
-                  |> range(start: {start_time.isoformat()}Z, stop: {end_time.isoformat()}Z)
+                  |> range(start: {start_time_utc.isoformat().replace('+00:00', 'Z')}, stop: {end_time_utc.isoformat().replace('+00:00', 'Z')})
                   |> filter(fn: (r) => r._measurement == "ohlc_{interval_val}")
                   |> filter(fn: (r) => r.symbol == "{token}")
                   |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
@@ -68,10 +90,11 @@ def get_initial_historical_data(
             
             full_data = []
             
+            # This logic for display timezone conversion is correct and remains.
             try:
                 target_tz = ZoneInfo(timezone)
             except Exception:
-                logging.warning(f"Invalid timezone '{timezone}' provided. Defaulting to UTC.")
+                logging.warning(f"Invalid timezone '{timezone}' provided for display. Defaulting to UTC.")
                 target_tz = ZoneInfo("UTC")
 
             for table in tables:
@@ -98,7 +121,6 @@ def get_initial_historical_data(
             if not full_data:
                 return schemas.HistoricalDataResponse(candles=[], total_available=0, is_partial=False, message="No data available in InfluxDB for this range.", request_id=None, offset=None)
 
-            # Use the default expiration from the cache module
             set_cached_ohlc_data(request_id, full_data, expiration=CACHE_EXPIRATION_SECONDS)
             logging.info(f"Cache SET for {request_id} with {len(full_data)} records for {CACHE_EXPIRATION_SECONDS}s.")
 

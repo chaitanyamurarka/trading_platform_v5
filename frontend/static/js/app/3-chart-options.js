@@ -7,65 +7,50 @@ import * as elements from './1-dom-elements.js';
  * @param {string} theme - The current theme ('light' or 'dark').
  * @returns {object} The chart options for the Lightweight Charts library.
  */
-export function getChartOptions(theme) {
-    const isDark = theme === 'dark';
-    const bgColor = isDark ? '#1a1e25' : '#ffffff';
-    const textColor = isDark ? '#d1d5db' : '#1f2937';
-    const gridColor = isDark ? '#374151' : '#e5e7eb';
+// frontend/static/js/app/3-chart-options.js
 
-    // --- MODIFICATION START ---
-    // Read the scaling mode from the dropdown to control price scale behavior.
-    const scalingMode = elements.scalingSelect.value;
-    const isAutoScale = scalingMode === 'automatic';
-    // --- MODIFICATION END ---
+export const chartOptions = (theme) => {
+    const isDark = theme === 'dark';
+    const gridColor = isDark ? '#333' : '#e0e0e0';
+    const textColor = isDark ? '#fff' : '#333';
 
     return {
         layout: {
-            background: { color: bgColor },
+            background: { color: isDark ? '#1a1a1a' : '#ffffff' },
             textColor: textColor,
         },
         grid: {
             vertLines: { color: gridColor },
             horzLines: { color: gridColor },
         },
-        // --- MODIFICATION START ---
-        // Apply the selected scaling mode to the chart's price scales.
-        rightPriceScale: {
-            borderColor: gridColor,
-            autoScale: isAutoScale, // Enable or disable auto-scaling.
-            scaleMargins: {
-                top: 0.1,
-                bottom: 0.1,
-            },
-        },
-        leftPriceScale: {
-            visible: true,
-            borderColor: gridColor,
-            autoScale: isAutoScale, // Sync with the right scale.
-            scaleMargins: {
-                top: 0.1,
-                bottom: 0.1,
-            },
-        },
-        // --- MODIFICATION END ---
-        timeScale: {
-            borderColor: gridColor,
-            timeVisible: true,
-            secondsVisible: false,
-        },
         crosshair: {
             mode: LightweightCharts.CrosshairMode.Normal,
         },
+        rightPriceScale: {
+            borderColor: gridColor,
+        },
+        timeScale: {
+            timeVisible: true,
+            secondsVisible: true,
+            borderColor: gridColor,
+            
+            // =================================================================
+            // --- NEW FIX: Prevent the chart from automatically shifting ---
+            // This ensures that the initial data, including after-hours bars,
+            // remains in view after being loaded.
+            // =================================================================
+            shiftVisibleRangeOnNewBar: false,
+        },
         watermark: {
             color: 'rgba(150, 150, 150, 0.2)',
-            visible: false,
-            text: 'EigenKor',
+            visible: true,
+            text: 'My Trading Platform',
             fontSize: 48,
             horzAlign: 'center',
             vertAlign: 'center',
-        },
+        }
     };
-}
+};
 
 /**
  * Generates the options for the main candlestick/bar series.

@@ -26,6 +26,59 @@ async function fetchHistoricalChunk(requestId, offset, limit) {
     return response.json();
 }
 
+// =================================================================
+// --- NEW FUNCTION TO AUTOMATICALLY SET START AND END TIMES ---
+// =================================================================
+function setAutomaticDateTime() {
+    // Get current time and convert to ET ('America/New_York')
+    const now = new Date();
+    // Using Intl.DateTimeFormat to reliably get the current time in a specific timezone
+    const etFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    });
+
+    const parts = etFormatter.formatToParts(now).reduce((acc, part) => {
+        acc[part.type] = part.value;
+        return acc;
+    }, {});
+    
+    // Construct a date object representing the current time in ET
+    const etDate = new Date(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`);
+
+    let targetEndDate = new Date(etDate);
+
+    // If current ET is before 8 PM (20:00), we set the target to the previous day.
+    if (etDate.getHours() < 20) {
+        targetEndDate.setDate(targetEndDate.getDate() - 1);
+    }
+
+    // Set the end time to exactly 8 PM (20:00:00) on the target date
+    targetEndDate.setHours(20, 0, 0, 0);
+
+    // Set the start time to be 90 days before the end time for a decent initial view
+    let startDate = new Date(targetEndDate);
+    startDate.setDate(startDate.getDate() - 90);
+    
+    // Function to format Date objects into 'YYYY-MM-DDTHH:mm' string for datetime-local input
+    const formatForInput = (date) => {
+        const year = date.getFullYear();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+
+    // Update the DOM elements with the calculated values
+    elements.startTimeInput.value = formatForInput(startDate);
+    elements.endTimeInput.value = formatForInput(targetEndDate);
+    elements.timezoneSelect.value = 'America/New_York'; // Explicitly set timezone
+    console.log(`Auto-set time range: ${elements.startTimeInput.value} to ${elements.endTimeInput.value} [America/New_York]`);
+}
+
+
 export async function fetchAndPrependDataChunk() {
     const nextOffset = state.chartCurrentOffset - constants.DATA_CHUNK_SIZE;
     if (nextOffset < 0) { state.allDataLoaded = true; return; }
@@ -56,6 +109,10 @@ export async function fetchAndPrependDataChunk() {
 
 export async function loadInitialChart() {
     if (!state.sessionToken) return;
+
+    // --- ADD THIS LINE TO AUTOMATICALLY SET THE TIME ---
+    setAutomaticDateTime();
+
     state.currentlyFetching = true;
     elements.loadingIndicator.style.display = 'flex';
     state.allDataLoaded = false;

@@ -1,7 +1,8 @@
 import os
 import logging
 import time
-from datetime import datetime as dt, timezone
+from datetime import datetime as dt, timezone, time as dt_time, timedelta
+
 # For timezone-aware datetime objects. ZoneInfo is in the standard library for Python 3.9+.
 # If using an older version, you might need 'pip install backports.zoneinfo' or use 'pytz'.
 try:
@@ -24,20 +25,69 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # InfluxDB Configuration
-INFLUX_URL = settings.INFLUX_URL 
+INFLUX_URL = settings.INFLUX_URL
 INFLUX_TOKEN = settings.INFLUX_TOKEN
 INFLUX_ORG = settings.INFLUX_ORG
 INFLUX_BUCKET = settings.INFLUX_BUCKET
 
 # --- InfluxDB Connection ---
-influx_client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG, timeout=90_000) # Increased timeout for heavy queries
+influx_client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG, timeout=90_000)
 write_api = influx_client.write_api(write_options=WriteOptions(batch_size=5000, flush_interval=10_000, jitter_interval=2_000))
 query_api = influx_client.query_api()
+
+
+def is_nasdaq_trading_hours(check_time_utc: dt | None = None) -> bool:
+    """
+    Checks if a given UTC time falls within NASDAQ trading hours (9:30 AM to 4:00 PM ET)
+    on a weekday.
+    """
+    et_zone = ZoneInfo("America/New_York")
+
+    if check_time_utc is None:
+        check_time_utc = dt.now(timezone.utc)
+
+    et_time = check_time_utc.astimezone(et_zone)
+
+    if et_time.weekday() >= 5:
+        logging.info("Skipping operation: It's the weekend, NASDAQ is closed.")
+        return False
+
+    trading_start = dt_time(9, 30)
+    trading_end = dt_time(16, 0)
+
+    if trading_start <= et_time.time() <= trading_end:
+        logging.warning(
+            f"Current time {et_time.time()} is within NASDAQ trading hours (9:30 AM - 4:00 PM ET). Deferring historical operations.")
+        return True
+
+    logging.info(f"Current time {et_time.time()} is outside NASDAQ trading hours. Safe to proceed.")
+    return False
+
+def get_last_completed_session_end_time_utc() -> dt:
+    """
+    Determines the timestamp of the end of the last fully completed trading session (8 PM ET).
+    """
+    et_zone = ZoneInfo("America/New_York")
+    now_et = dt.now(et_zone)
+    
+    target_date_et = now_et.date()
+    
+    if now_et.time() < dt_time(20, 0):
+        target_date_et -= timedelta(days=1)
+        
+    if target_date_et.weekday() == 5:
+        target_date_et -= timedelta(days=1)
+    elif target_date_et.weekday() == 6:
+        target_date_et -= timedelta(days=2)
+        
+    session_end_et = dt.combine(target_date_et, dt_time(20, 0), tzinfo=et_zone)
+    
+    return session_end_et.astimezone(timezone.utc)
+
 
 def get_latest_timestamp(symbol: str, measurement: str) -> dt | None:
     """
     Queries InfluxDB for the latest timestamp for a given symbol and measurement.
-    Returns a timezone-aware datetime object (UTC) or None if no data is found.
     """
     flux_query = f'''
         from(bucket: "{INFLUX_BUCKET}")
@@ -54,7 +104,6 @@ def get_latest_timestamp(symbol: str, measurement: str) -> dt | None:
         
         latest_time = tables[0].records[0].get_time()
         
-        # Ensure the datetime is timezone-aware (it should be UTC from InfluxDB)
         if latest_time.tzinfo is None:
             latest_time = latest_time.replace(tzinfo=timezone.utc)
             
@@ -64,31 +113,38 @@ def get_latest_timestamp(symbol: str, measurement: str) -> dt | None:
         logging.error(f"Error querying latest timestamp for {symbol} in {measurement}: {e}", exc_info=True)
         return None
 
-def format_data_for_influx(dtn_data: np.ndarray, symbol: str, exchange: str, measurement: str) -> list[Point]:
+def format_data_for_influx(
+    dtn_data: np.ndarray,
+    symbol: str,
+    exchange: str,
+    measurement: str,
+    end_time_utc_cutoff: dt | None = None
+) -> list[Point]:
     """
-    Converts NumPy array from pyiqfeed to a list of InfluxDB Points,
-    correctly handling the source timezone.
+    Converts NumPy array from pyiqfeed to InfluxDB Points, filtering out records
+    after the specified UTC cutoff time as a safeguard.
     """
     points = []
     has_time_field = 'time' in dtn_data.dtype.names
     has_prd_vlm = 'prd_vlm' in dtn_data.dtype.names
     has_tot_vlm = 'tot_vlm' in dtn_data.dtype.names
 
-    # Assume NASDAQ data from IQFeed is in US/Eastern time.
     source_timezone = ZoneInfo("America/New_York")
 
     for rec in dtn_data:
-        # Create a naive datetime object first from the IQFeed data
         if has_time_field:
             naive_timestamp_dt = iq.date_us_to_datetime(rec['date'], rec['time'])
         else:
             daily_date = iq.datetime64_to_date(rec['date'])
             naive_timestamp_dt = dt.combine(daily_date, dt.min.time())
 
-        # Make the naive datetime "aware" of its actual timezone (ET)
         aware_timestamp_dt = naive_timestamp_dt.replace(tzinfo=source_timezone)
 
-        # .timestamp() on an aware datetime correctly converts it to a UTC-based Unix timestamp.
+        if end_time_utc_cutoff:
+            timestamp_utc = aware_timestamp_dt.astimezone(timezone.utc)
+            if timestamp_utc > end_time_utc_cutoff:
+                continue
+
         unix_timestamp_microseconds = int(aware_timestamp_dt.timestamp() * 1_000_000)
 
         volume = 0
@@ -114,81 +170,110 @@ def format_data_for_influx(dtn_data: np.ndarray, symbol: str, exchange: str, mea
 
 def fetch_and_store_history(symbol: str, exchange: str, hist_conn: iq.HistoryConn):
     """
-    Fetches history for all supported timeframes. If data already exists,
-    it fetches incrementally from the last known timestamp. Otherwise, it performs
-    a full backfill.
+    Fetches history and filters it to ensure only data from complete trading
+    sessions is stored.
     """
     logging.info(f"Starting historical data ingestion for {symbol}...")
 
     timeframes_to_fetch = {
-        # Seconds
         "1s":   {"interval": 1,    "type": "s", "days": 7},
         "5s":   {"interval": 5,    "type": "s", "days": 7},
         "10s":  {"interval": 10,   "type": "s", "days": 7},
         "15s":  {"interval": 15,   "type": "s", "days": 7},
         "30s":  {"interval": 30,   "type": "s", "days": 7},
         "45s":  {"interval": 45,   "type": "s", "days": 7},
-        # Minutes
         "1m":   {"interval": 60,   "type": "s", "days": 180},
         "5m":   {"interval": 300,  "type": "s", "days": 180},
         "10m":  {"interval": 600,  "type": "s", "days": 180},
         "15m":  {"interval": 900,  "type": "s", "days": 180},
         "30m":  {"interval": 1800, "type": "s", "days": 180},
         "45m":  {"interval": 2700, "type": "s", "days": 180},
-        # Hours
         "1h":   {"interval": 3600, "type": "s", "days": 180},
-        # Days
         "1d":   {"interval": 1,    "type": "d", "days": 10000}
     }
+
+    last_session_end_utc = get_last_completed_session_end_time_utc()
+    logging.info(f"Data will be filtered to on or before last session end: {last_session_end_utc}")
 
     for tf_name, params in timeframes_to_fetch.items():
         try:
             measurement = f"ohlc_{tf_name}"
             latest_timestamp = get_latest_timestamp(symbol, measurement)
-
-            days_to_fetch = params['days']
-            if latest_timestamp:
-                # Calculate days from last data point to now. Add 1 for a buffer.
-                incremental_days = (dt.now(timezone.utc) - latest_timestamp).days + 1
-                # Fetch the smaller of the two: the incremental days or the full backfill period.
-                days_to_fetch = min(incremental_days, params['days'])
-                logging.info(f"Incremental fetch for {tf_name} data for {symbol}. Fetching last {days_to_fetch} days.")
-            else:
-                logging.info(f"Full backfill for {tf_name} data for {symbol}. Fetching last {days_to_fetch} days.")
-
-            if days_to_fetch <= 0:
-                logging.info(f"Data for {symbol} on {tf_name} is already up to date. Skipping fetch.")
-                continue
-
+            
             dtn_data = None
-            if params['type'] == "d":
-                 dtn_data = hist_conn.request_daily_data(ticker=symbol, num_days=days_to_fetch, ascend=True)
-            else:
-                 dtn_data = hist_conn.request_bars_for_days(
-                    ticker=symbol, interval_len=params['interval'], interval_type=params['type'],
-                    days=days_to_fetch, ascend=True
+            
+            # =================================================================
+            # --- NEW: Using request_bars_in_period for precise intraday data ---
+            # =================================================================
+            if params['type'] != 'd':  # For all intraday intervals
+                
+                start_dt_for_request = None
+                if latest_timestamp:
+                    start_dt_for_request = latest_timestamp
+                else:
+                    # If no data exists, backfill for the number of days specified in the config
+                    start_dt_for_request = last_session_end_utc - timedelta(days=params['days'])
+                
+                # The end of our request period is the end of the last completed session
+                end_dt_for_request = last_session_end_utc
+
+                if start_dt_for_request >= end_dt_for_request:
+                    logging.info(f"Data for {tf_name} is already up-to-date. Skipping fetch.")
+                    continue
+                
+                logging.info(f"Requesting {tf_name} data from {start_dt_for_request} to {end_dt_for_request}")
+
+                dtn_data = hist_conn.request_bars_in_period(
+                    ticker=symbol,
+                    interval_len=params['interval'],
+                    interval_type=params['type'],
+                    bgn_prd=start_dt_for_request,
+                    end_prd=end_dt_for_request,
+                    ascend=True
                  )
+            else:  # For '1d' daily data, the old method is still best
+                days_to_fetch = params['days']
+                if latest_timestamp:
+                    days_to_fetch = (dt.now(timezone.utc) - latest_timestamp).days + 1
+
+                if days_to_fetch <= 0:
+                    logging.info(f"Daily data for {symbol} is up-to-date. Skipping.")
+                    continue
+                
+                dtn_data = hist_conn.request_daily_data(ticker=symbol, num_days=days_to_fetch, ascend=True)
 
             if dtn_data is not None and len(dtn_data) > 0:
-                logging.info(f"Fetched {len(dtn_data)} records for {tf_name} timeframe.")
-                influx_points = format_data_for_influx(dtn_data, symbol, exchange, measurement)
-                write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=influx_points)
-                logging.info(f"Wrote {len(influx_points)} points to InfluxDB measurement '{measurement}'.")
-                write_api.flush()
+                logging.info(f"Fetched {len(dtn_data)} records for {tf_name}.")
                 
+                influx_points = format_data_for_influx(
+                    dtn_data, symbol, exchange, measurement,
+                    end_time_utc_cutoff=last_session_end_utc
+                )
+                
+                if not influx_points:
+                    logging.warning(f"No new {tf_name} data for {symbol} on or before the last session end time (all fetched data may have been filtered).")
+                    continue
+
+                logging.info(f"Writing {len(influx_points)} filtered points to InfluxDB for '{measurement}'.")
+                write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=influx_points)
             else:
                 logging.warning(f"No new {tf_name} data returned for {symbol}.")
 
         except iq.NoDataError:
-            logging.warning(f"IQFeed reported NoDataError for {symbol} on {tf_name} timeframe.")
+            logging.warning(f"IQFeed reported NoDataError for {symbol} on {tf_name}.")
         except Exception as e:
-            logging.error(f"An error occurred while fetching {tf_name} data for {symbol}: {e}", exc_info=True)
-        time.sleep(2) # Pause between queries to avoid overwhelming the source
+            logging.error(f"An error occurred while fetching {tf_name} for {symbol}: {e}", exc_info=True)
+        time.sleep(1)
 
 def daily_update(symbols_to_update: list, exchange: str):
     """
-    Performs the daily update for a list of symbols.
+    Performs the daily update, respecting trading hours.
     """
+    logging.info("--- Checking conditions for Daily Update Process ---")
+    if is_nasdaq_trading_hours():
+        logging.warning("Aborting daily update: operation is not permitted during trading hours.")
+        return
+
     logging.info("--- Starting Daily Update Process ---")
     hist_conn = get_iqfeed_history_conn()
     if hist_conn is None:
@@ -197,19 +282,26 @@ def daily_update(symbols_to_update: list, exchange: str):
 
     with iq.ConnConnector([hist_conn]):
         for symbol in symbols_to_update:
-            logging.info(f"Daily update for {symbol}...")
             fetch_and_store_history(symbol, exchange, hist_conn)
 
     logging.info("--- Daily Update Process Finished ---")
+    influx_client.close()
+
 
 if __name__ == '__main__':
-    symbols_to_backfill = ["AAPL", "AMZN", "TSLA", "@NQ#"]
-    exchange = "NASDAQ"
-
-    iq_connection = get_iqfeed_history_conn()
-    if iq_connection:
-        with iq.ConnConnector([iq_connection]):
-            for new_symbol in symbols_to_backfill:
-                fetch_and_store_history(new_symbol, exchange, iq_connection)
+    if is_nasdaq_trading_hours():
+        logging.error("Cannot perform manual backfill during NASDAQ trading hours.")
     else:
-        logging.error("Failed to connect to IQFeed. Cannot perform backfill.")
+        symbols_to_backfill = ["AAPL", "AMZN", "TSLA", "@NQ#"]
+        exchange = "NASDAQ"
+
+        iq_connection = get_iqfeed_history_conn()
+        if iq_connection:
+            with iq.ConnConnector([iq_connection]):
+                for new_symbol in symbols_to_backfill:
+                    fetch_and_store_history(new_symbol, exchange, iq_connection)
+        else:
+            logging.error("Failed to connect to IQFeed. Cannot perform backfill.")
+    
+    logging.info("Script finished. Closing InfluxDB client.")
+    influx_client.close()

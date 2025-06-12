@@ -58,7 +58,7 @@ class LiveTickListener(iq.SilentQuoteListener):
                     bar_datetime = bar['date'] + bar['time']
                     
                     bar_data = {
-                        "timestamp": int(bar_datetime.astype(datetime).replace(tzinfo=timezone.utc).timestamp()),
+                        "timestamp": int(bar_datetime.astype(datetime).replace().timestamp()),
                         "open": float(bar['open_p']),
                         "high": float(bar['high_p']),
                         "low": float(bar['low_p']),

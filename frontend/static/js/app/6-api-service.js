@@ -189,6 +189,7 @@ export async function startSession() {
 export function disconnectFromLiveDataFeed() {
     if (liveDataSocket) {
         console.log('Closing existing WebSocket connection.');
+        liveDataSocket.onclose = null; // Prevent the onclose handler from firing during a manual disconnect
         liveDataSocket.close();
         liveDataSocket = null;
     }
@@ -203,39 +204,77 @@ export function connectToLiveDataFeed(symbol, interval) {
     // Ensure any old connection is closed before starting a new one.
     disconnectFromLiveDataFeed();
 
-    // --- MODIFICATION START ---
-    // Get the currently selected timezone from the dropdown.
     const timezone = elements.timezoneSelect.value;
     if (!timezone) {
         showToast('Please select a timezone before connecting to live feed.', 'error');
         return;
     }
 
-    // Construct the WebSocket URL, now including the timezone.
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsURL = `${wsProtocol}//${window.location.host}/ws/live/${symbol}/${interval}/${encodeURIComponent(timezone)}`;
-    // --- MODIFICATION END ---
     
     console.log(`Connecting to WebSocket: ${wsURL}`);
     showToast(`Connecting to live feed for ${symbol}...`, 'info');
 
-    liveDataSocket = new WebSocket(wsURL);
+    // Create a local WebSocket object to prevent race conditions.
+    const socket = new WebSocket(wsURL);
 
-    liveDataSocket.onopen = () => {
+    // Assign all event handlers to the local `socket` object first.
+    socket.onopen = () => {
         console.log('WebSocket connection established.');
         showToast(`Live feed connected for ${symbol}!`, 'success');
     };
     
-    liveDataSocket.onmessage = (event) => {
+    socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        const { completed_bar, current_bar } = data;
 
-        // The main candlestick series on your chart is in the global state
-        if (state.mainSeries && current_bar) {
+        // Case 1: The message is an array, so it's a backfill.
+        if (Array.isArray(data)) {
+            if (data.length === 0) return;
+
+            console.log(`Received backfill data with ${data.length} bars.`);
+
+            // Format the incoming backfill data to match the chart's required structure
+            const formattedBackfillBars = data.map(c => ({
+                time: c.unix_timestamp,
+                open: c.open,
+                high: c.high,
+                low: c.low,
+                close: c.close
+            }));
+
+            const formattedVolumeBars = data.map(c => ({
+                time: c.unix_timestamp,
+                value: c.volume,
+                color: c.close >= c.open ? elements.volUpColorInput.value + '80' : elements.volDownColorInput.value + '80'
+            }));
+
+            // Get the timestamp of the last bar we already have from the initial historical fetch
+            const lastHistoricalTime = state.allChartData.length > 0
+                ? state.allChartData[state.allChartData.length - 1].time
+                : 0;
+
+            // Filter the backfill to only include bars that are newer than our existing data
+            const newOhlcBars = formattedBackfillBars.filter(d => d.time > lastHistoricalTime);
+            const newVolumeBars = formattedVolumeBars.filter(d => d.time > lastHistoricalTime);
+
+            if (newOhlcBars.length > 0) {
+                // Append the new, non-overlapping bars to our main data arrays
+                state.allChartData.push(...newOhlcBars);
+                state.allVolumeData.push(...newVolumeBars);
+
+                // Use setData() to efficiently load the merged data chunk into the chart
+                state.mainSeries.setData(state.allChartData);
+                state.volumeSeries.setData(state.allVolumeData);
+                console.log(`Applied ${newOhlcBars.length} new bars from backfill.`);
+            } else {
+                console.log('Backfill data did not contain any new bars.');
+            }
+        }
+        // Case 2: The message is an object, so it's a single live bar update.
+        else if (data.current_bar && state.mainSeries) {
+            const { current_bar } = data;
             
-            // --- MODIFICATION START ---
-            // The lightweight-charts library expects the time field to be named 'time'.
-            // We need to map the 'unix_timestamp' from our backend to 'time' for the chart.
             const chartFormattedBar = {
                 time: current_bar.unix_timestamp,
                 open: current_bar.open,
@@ -244,9 +283,7 @@ export function connectToLiveDataFeed(symbol, interval) {
                 close: current_bar.close
             };
             state.mainSeries.update(chartFormattedBar);
-            // --- MODIFICATION END ---
             
-            // Update the volume series as well
             if (state.volumeSeries) {
                 const volumeData = {
                     time: current_bar.unix_timestamp, 
@@ -255,18 +292,10 @@ export function connectToLiveDataFeed(symbol, interval) {
                 };
                 state.volumeSeries.update(volumeData);
             }
-            // Also update the summary display with the latest data
             updateDataSummary(current_bar);
         }
     };
 
-    liveDataSocket.onclose = () => {
-        console.log('WebSocket connection closed.');
-        showToast('Live feed disconnected.', 'warning');
-    };
-
-    liveDataSocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        showToast('Live feed connection error.', 'error');
-    };
+    // Only assign to the module-level variable after the object is fully configured.
+    liveDataSocket = socket;
 }

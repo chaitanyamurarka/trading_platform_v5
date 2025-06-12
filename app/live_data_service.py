@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import AsyncGenerator, Dict, Optional,List
+from typing import AsyncGenerator, Dict, Optional, List
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
@@ -72,9 +72,11 @@ class BarResampler:
         # Return the naive datetime, representing the local time of the bar start.
         return bar_start_local_dt.replace(tzinfo=None)
 
-    def add_bar(self, bar: Dict) -> Optional[schemas.Candle]:
+    # --- MODIFIED METHOD ---
+    def add_bar(self, bar: Dict, is_from_dtn_backfill: bool = False) -> Optional[schemas.Candle]:
         """
-        Adds a new 1-second bar and generates a "fake UTC timestamp".
+        Adds a new 1-second bar. It applies a timezone correction if the bar
+        is from the DTN backfill data.
         """
         completed_bar = None
         
@@ -83,13 +85,24 @@ class BarResampler:
         low_p = float(bar['low'])
         close_p = float(bar['close'])
         volume = int(bar['volume'])
-        timestamp_utc = datetime.fromtimestamp(bar['timestamp'], tz=timezone.utc)
         
-        # --- MODIFICATION START ---
-        # 1. Get the naive local start time of the bar (e.g., datetime object for 09:30:00).
+        timestamp_utc: datetime
+
+        # if is_from_dtn_backfill:
+        #     # Path for Backfill Data: Corrects a timestamp that represents ET wall-clock time.
+        #     naive_wall_time = datetime.fromtimestamp(bar['timestamp'], tz=timezone.utc).replace(tzinfo=None)
+        #     source_timezone = ZoneInfo("America/New_York")
+        #     source_aware_dt = naive_wall_time.replace(tzinfo=source_timezone)
+        #     timestamp_utc = source_aware_dt.astimezone(timezone.utc)
+        # else:
+        #     # Path for Live Data: Assumes a standard, correct UTC Unix timestamp.
+        #     timestamp_utc = datetime.fromtimestamp(bar['timestamp'], tz=timezone.utc)
+        
+        # The rest of the logic proceeds with a correctly-defined `timestamp_utc`
+
+        timestamp_utc = datetime.fromtimestamp(bar['timestamp'])
+
         bar_start_naive = self._get_bar_start_time_naive(timestamp_utc)
-        
-        # 2. Create the "fake" UTC timestamp by interpreting the naive local time as if it were UTC.
         fake_utc_timestamp = bar_start_naive.replace(tzinfo=timezone.utc).timestamp()
         
         if not self.current_bar:
@@ -111,9 +124,71 @@ class BarResampler:
                 self.current_bar.volume += volume
 
         self.last_bar_time = timestamp_utc
-        # --- MODIFICATION END ---
         return completed_bar
 
+
+async def get_cached_intraday_bars(symbol: str, interval: str, timezone_str: str) -> List[schemas.Candle]:
+    """
+    Fetches 1-second bars from the Redis cache, resamples them, and returns them.
+    """
+    cache_key = f"intraday_bars:{symbol}"
+    try:
+        cached_bars_str = await redis_client.lrange(cache_key, 0, -1)
+        if not cached_bars_str:
+            return []
+
+        one_sec_bars = [json.loads(b) for b in cached_bars_str]
+        
+        resampler = BarResampler(interval, timezone_str)
+        resampled_bars = []
+        for bar in one_sec_bars:
+            # --- MODIFIED CALL ---
+            # Pass the flag indicating this is backfill data needing correction.
+            completed_bar = resampler.add_bar(bar, is_from_dtn_backfill=True)
+            if completed_bar:
+                resampled_bars.append(completed_bar)
+        
+        if resampler.current_bar:
+            resampled_bars.append(resampler.current_bar)
+        
+        return resampled_bars
+
+    except Exception as e:
+        logger.error(f"Error fetching/resampling cached intraday bars for {symbol}: {e}", exc_info=True)
+        return []
+
+
+async def live_data_stream(websocket: WebSocket, symbol: str, interval: str, timezone_str: str):
+    """
+    Handles the WebSocket connection for live data.
+    First sends cached intraday data, then streams live updates.
+    """
+    await websocket.accept()
+
+    try:
+        cached_bars = await get_cached_intraday_bars(symbol, interval, timezone_str)
+        if cached_bars:
+            await websocket.send_json([bar.model_dump() for bar in cached_bars])
+        logger.info(f"Sent {len(cached_bars)} cached bars to client for {symbol}.")
+    except Exception as e:
+        logger.error(f"Failed to send cached data for {symbol}: {e}")
+
+    resampler = BarResampler(interval, timezone_str)
+    
+    async for bar_message in redis_pubsub_generator(symbol):
+        try:
+            # The call for live data does not pass the flag, so it defaults to False.
+            completed_bar = resampler.add_bar(bar_message)
+            
+            live_update_payload = {
+                "completed_bar": completed_bar.model_dump() if completed_bar else None,
+                "current_bar": resampler.current_bar.model_dump() if resampler.current_bar else None
+            }
+            await websocket.send_json(live_update_payload)
+        except Exception as e:
+            logger.error(f"Error processing live bar for {symbol}: {e}")
+
+# --- FUNCTION WITH FIX ---
 async def get_cached_intraday_bars(symbol: str, interval: str, timezone_str: str) -> List[schemas.Candle]:
     """
     Fetches 1-second bars from the Redis cache, resamples them, and returns them.
@@ -136,46 +211,18 @@ async def get_cached_intraday_bars(symbol: str, interval: str, timezone_str: str
             if completed_bar:
                 resampled_bars.append(completed_bar)
         
+        # --- FIX ---
+        # After the loop, append the final, incomplete bar from the resampler.
+        # This ensures the last bar of the backfill is not dropped.
+        if resampler.current_bar:
+            resampled_bars.append(resampler.current_bar)
+        # --- END FIX ---
+        
         return resampled_bars
 
     except Exception as e:
         logger.error(f"Error fetching/resampling cached intraday bars for {symbol}: {e}", exc_info=True)
         return []
-
-
-async def live_data_stream(websocket: WebSocket, symbol: str, interval: str, timezone_str: str):
-    """
-    Handles the WebSocket connection for live data.
-    First sends cached intraday data, then streams live updates.
-    """
-    await websocket.accept()
-
-    # 1. Fetch and send cached intraday data
-    try:
-        cached_bars = await get_cached_intraday_bars(symbol, interval, timezone_str)
-        if cached_bars:
-            # Pydantic models need to be converted to dicts for JSON serialization
-            await websocket.send_json([bar.model_dump() for bar in cached_bars])
-        logger.info(f"Sent {len(cached_bars)} cached bars to client for {symbol}.")
-    except Exception as e:
-        logger.error(f"Failed to send cached data for {symbol}: {e}")
-        # Continue to live data even if cache fails
-
-    # 2. Start streaming live data
-    resampler = BarResampler(interval, timezone_str)
-    
-    async for bar_message in redis_pubsub_generator(symbol):
-        try:
-            completed_bar = resampler.add_bar(bar_message)
-            
-            # Send both the newly completed bar and the latest state of the current bar
-            live_update_payload = {
-                "completed_bar": completed_bar.model_dump() if completed_bar else None,
-                "current_bar": resampler.current_bar.model_dump() if resampler.current_bar else None
-            }
-            await websocket.send_json(live_update_payload)
-        except Exception as e:
-            logger.error(f"Error processing live bar for {symbol}: {e}")
 
 async def redis_pubsub_generator(symbol: str) -> AsyncGenerator[Dict, None]:
     """

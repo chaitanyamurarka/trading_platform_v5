@@ -5,6 +5,7 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator, Dict, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 import redis.asyncio as aioredis
@@ -23,11 +24,17 @@ class BarResampler:
     Aggregates 1-second BARS from Redis into OHLCV bars of a specified interval.
     """
 
-    def __init__(self, interval_str: str):
+    def __init__(self, interval_str: str, timezone_str: str):
         self.interval_str = interval_str
         self.interval_td = self._parse_interval(interval_str)
         self.current_bar: Optional[schemas.Candle] = None
         self.last_bar_time: Optional[datetime] = None
+        try:
+            self.tz = ZoneInfo(timezone_str)
+            logger.info(f"BarResampler initialized for timezone: {timezone_str}")
+        except ZoneInfoNotFoundError:
+            logger.warning(f"Invalid timezone '{timezone_str}', falling back to UTC.")
+            self.tz = timezone.utc
 
     def _parse_interval(self, interval_str: str) -> timedelta:
         """Converts an interval string like '1m', '5s', '1h' to a timedelta."""
@@ -41,26 +48,33 @@ class BarResampler:
             return timedelta(hours=value)
         raise ValueError(f"Invalid interval format: {interval_str}")
 
-    def _get_bar_start_time(self, dt: datetime) -> datetime:
+    def _get_bar_start_time_naive(self, dt: datetime) -> datetime:
         """
-        Calculates the start time of the bar for a given timestamp using
-        standard unix timestamp arithmetic.
+        Calculates the start time for a bar in the local timezone and returns it
+        as a naive datetime object (timezone info is stripped).
         """
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
 
-        unix_timestamp = dt.timestamp()
+        # Convert the UTC time to the user's selected timezone
+        local_dt = dt.astimezone(self.tz)
+        
         interval_seconds = self.interval_td.total_seconds()
         
-        floored_timestamp = int(unix_timestamp / interval_seconds) * interval_seconds
+        seconds_past_midnight = local_dt.hour * 3600 + local_dt.minute * 60 + local_dt.second
+        seconds_into_current_interval = seconds_past_midnight % interval_seconds
         
-        return datetime.fromtimestamp(floored_timestamp, tz=timezone.utc)
+        bar_start_local_dt = local_dt - timedelta(
+            seconds=seconds_into_current_interval,
+            microseconds=local_dt.microsecond
+        )
+        
+        # Return the naive datetime, representing the local time of the bar start.
+        return bar_start_local_dt.replace(tzinfo=None)
 
     def add_bar(self, bar: Dict) -> Optional[schemas.Candle]:
         """
-        Adds a new 1-second bar to the current resampled bar or creates a new one.
-
-        Returns the completed bar if a new bar has just been finished.
+        Adds a new 1-second bar and generates a "fake UTC timestamp".
         """
         completed_bar = None
         
@@ -69,34 +83,26 @@ class BarResampler:
         low_p = float(bar['low'])
         close_p = float(bar['close'])
         volume = int(bar['volume'])
-        timestamp = datetime.fromtimestamp(bar['timestamp'], tz=timezone.utc)
-
+        timestamp_utc = datetime.fromtimestamp(bar['timestamp'], tz=timezone.utc)
+        
+        # --- MODIFICATION START ---
+        # 1. Get the naive local start time of the bar (e.g., datetime object for 09:30:00).
+        bar_start_naive = self._get_bar_start_time_naive(timestamp_utc)
+        
+        # 2. Create the "fake" UTC timestamp by interpreting the naive local time as if it were UTC.
+        fake_utc_timestamp = bar_start_naive.replace(tzinfo=timezone.utc).timestamp()
+        
         if not self.current_bar:
-            bar_start_time = self._get_bar_start_time(timestamp)
             self.current_bar = schemas.Candle(
-                # The 'timestamp' field is not in the schema, so it's removed.
-                open=open_p,
-                high=high_p,
-                low=low_p,
-                close=close_p,
-                volume=volume,
-                unix_timestamp=float(bar_start_time.timestamp())
+                open=open_p, high=high_p, low=low_p, close=close_p, volume=volume,
+                unix_timestamp=fake_utc_timestamp
             )
         else:
-            bar_start_time = self._get_bar_start_time(timestamp)
-            
-            # --- MODIFICATION ---
-            # Compare the new bar's timestamp with the unix_timestamp of the current bar
-            if bar_start_time.timestamp() > self.current_bar.unix_timestamp:
+            if fake_utc_timestamp > self.current_bar.unix_timestamp:
                 completed_bar = self.current_bar
                 self.current_bar = schemas.Candle(
-                    # The 'timestamp' field is not in the schema, so it's removed.
-                    open=open_p,
-                    high=high_p,
-                    low=low_p,
-                    close=close_p,
-                    volume=volume,
-                    unix_timestamp=float(bar_start_time.timestamp())
+                    open=open_p, high=high_p, low=low_p, close=close_p, volume=volume,
+                    unix_timestamp=fake_utc_timestamp
                 )
             else:
                 self.current_bar.high = max(self.current_bar.high, high_p)
@@ -104,7 +110,8 @@ class BarResampler:
                 self.current_bar.close = close_p
                 self.current_bar.volume += volume
 
-        self.last_bar_time = timestamp
+        self.last_bar_time = timestamp_utc
+        # --- MODIFICATION END ---
         return completed_bar
 
 
@@ -126,12 +133,12 @@ async def redis_pubsub_generator(symbol: str) -> AsyncGenerator[Dict, None]:
                     logger.error(f"Error decoding bar data from Redis: {e}")
             await asyncio.sleep(0.01)
 
-async def websocket_handler(websocket: WebSocket, symbol: str, interval: str):
+async def websocket_handler(websocket: WebSocket, symbol: str, interval: str, timezone: str):
     """
     Manages the WebSocket lifecycle for a live data subscription.
     """
     await websocket.accept()
-    resampler = BarResampler(interval)
+    resampler = BarResampler(interval, timezone)
     redis_generator = redis_pubsub_generator(symbol)
 
     try:

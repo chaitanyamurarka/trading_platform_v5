@@ -203,9 +203,18 @@ export function connectToLiveDataFeed(symbol, interval) {
     // Ensure any old connection is closed before starting a new one.
     disconnectFromLiveDataFeed();
 
-    // Construct the WebSocket URL based on the current window location.
+    // --- MODIFICATION START ---
+    // Get the currently selected timezone from the dropdown.
+    const timezone = elements.timezoneSelect.value;
+    if (!timezone) {
+        showToast('Please select a timezone before connecting to live feed.', 'error');
+        return;
+    }
+
+    // Construct the WebSocket URL, now including the timezone.
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsURL = `${wsProtocol}//${window.location.host}/ws/live/${symbol}/${interval}`;
+    const wsURL = `${wsProtocol}//${window.location.host}/ws/live/${symbol}/${interval}/${encodeURIComponent(timezone)}`;
+    // --- MODIFICATION END ---
     
     console.log(`Connecting to WebSocket: ${wsURL}`);
     showToast(`Connecting to live feed for ${symbol}...`, 'info');
@@ -216,7 +225,7 @@ export function connectToLiveDataFeed(symbol, interval) {
         console.log('WebSocket connection established.');
         showToast(`Live feed connected for ${symbol}!`, 'success');
     };
-
+    
     liveDataSocket.onmessage = (event) => {
         const data = JSON.parse(event.data);
         const { completed_bar, current_bar } = data;
@@ -250,7 +259,7 @@ export function connectToLiveDataFeed(symbol, interval) {
             updateDataSummary(current_bar);
         }
     };
-    
+
     liveDataSocket.onclose = () => {
         console.log('WebSocket connection closed.');
         showToast('Live feed disconnected.', 'warning');

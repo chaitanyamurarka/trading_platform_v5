@@ -24,36 +24,40 @@ export function setupChartObjectListeners() {
 }
 
 export function setupControlListeners(reloadChartCallback) {
-    // --- MODIFICATION START ---
-    // The 'scalingSelect' element has been removed from this list to prevent full reloads.
+    // --- Main controls that trigger a full chart reload ---
     [elements.exchangeSelect, elements.symbolSelect, elements.intervalSelect, elements.startTimeInput, elements.endTimeInput, elements.timezoneSelect].forEach(control => {
         control.addEventListener('change', reloadChartCallback);
     });
 
-    // A new, dedicated listener for the scaling select dropdown.
-elements.scalingSelect.addEventListener('click', (e) => {
-    if (!state.mainChart) return;
+    // --- New scaling buttons ---
+    const autoScaleBtn = document.getElementById('scaling-auto-btn');
+    const linearScaleBtn = document.getElementById('scaling-linear-btn');
 
-    const selectedValue = e.currentTarget.value;
-
-    if (selectedValue === 'automatic') {
-        // If 'Automatic' is clicked (even if it was already selected),
-        // restore the autoScale functionality.
-        state.mainChart.applyOptions({
-            rightPriceScale: { autoScale: true },
-            leftPriceScale: { autoScale: true }
-        });
-    } else {
-        // Handle other cases like 'Linear' if needed
-        state.mainChart.applyOptions({
-            rightPriceScale: { autoScale: false },
-            leftPriceScale: { autoScale: false }
+    if (autoScaleBtn) {
+        autoScaleBtn.addEventListener('click', () => {
+            if (!state.mainChart) return;
+            state.mainChart.applyOptions({
+                rightPriceScale: { autoScale: true },
+                leftPriceScale: { autoScale: true }
+            });
+            autoScaleBtn.classList.add('btn-active');
+            linearScaleBtn.classList.remove('btn-active');
         });
     }
-});
-    // --- MODIFICATION END ---
 
+    if (linearScaleBtn) {
+        linearScaleBtn.addEventListener('click', () => {
+            if (!state.mainChart) return;
+            state.mainChart.applyOptions({
+                rightPriceScale: { autoScale: false },
+                leftPriceScale: { autoScale: false }
+            });
+            linearScaleBtn.classList.add('btn-active');
+            autoScaleBtn.classList.remove('btn-active');
+        });
+    }
 
+    // --- Other UI controls ---
     elements.themeToggle.addEventListener('click', (event) => {
         event.preventDefault();
         const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -61,10 +65,10 @@ elements.scalingSelect.addEventListener('click', (e) => {
         updateThemeToggleIcon();
     });
 
-    // Other UI controls
     elements.screenshotBtn.addEventListener('click', takeScreenshot);
     elements.chartTypeSelect.addEventListener('change', (e) => recreateMainSeries(e.target.value));
-    
+
+    // --- Drawing tools ---
     elements.toolTrendLineBtn.addEventListener('click', () => state.mainChart && state.mainChart.addLineTool('TrendLine'));
     elements.toolHorizontalLineBtn.addEventListener('click', () => state.mainChart && state.mainChart.addLineTool('HorizontalLine'));
     elements.toolFibRetracementBtn.addEventListener('click', () => state.mainChart && state.mainChart.addLineTool('FibRetracement'));
@@ -72,13 +76,14 @@ elements.scalingSelect.addEventListener('click', (e) => {
     elements.toolBrushBtn.addEventListener('click', () => state.mainChart && state.mainChart.addLineTool('Brush'));
     elements.toolRemoveSelectedBtn.addEventListener('click', () => state.mainChart && state.mainChart.removeSelectedLineTools());
     elements.toolRemoveAllBtn.addEventListener('click', () => state.mainChart && state.mainChart.removeAllLineTools());
-    
+
+    // --- Settings Modal ---
     elements.bgColorInput.addEventListener('input', e => state.mainChart.applyOptions({ layout: { background: { color: e.target.value } } }));
     elements.gridColorInput.addEventListener('input', e => state.mainChart.applyOptions({ grid: { vertLines: { color: e.target.value }, horzLines: { color: e.target.value } } }));
     elements.watermarkInput.addEventListener('input', e => state.mainChart.applyOptions({ watermark: { color: 'rgba(150, 150, 150, 0.2)', visible: true, text: e.target.value, fontSize: 48, horzAlign: 'center', vertAlign: 'center' }}));
     [elements.upColorInput, elements.downColorInput, elements.wickUpColorInput, elements.wickDownColorInput].forEach(input => input.addEventListener('input', applySeriesColors));
     [elements.volUpColorInput, elements.volDownColorInput].forEach(input => input.addEventListener('input', applyVolumeColors));
-    
+
     elements.settingsModal.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', (e) => {
         elements.settingsModal.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
         e.currentTarget.classList.add('tab-active');

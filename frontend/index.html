@@ -84,10 +84,10 @@
                     <option value="America/Sao_Paulo">Sao Paulo</option>
                     <option value="Pacific/Honolulu">Honolulu</option>
                 </select>
-                <select id="scaling" class="select select-bordered select-sm">
-                    <option value="automatic">Automatic</option>
-                    <option value="linear">Linear</option>
-                </select>
+                <div class="join">
+                    <button id="scaling-auto-btn" class="btn btn-sm join-item btn-active" title="Automatic Scaling">Auto</button>
+                    <button id="scaling-linear-btn" class="btn btn-sm join-item" title="Linear Scaling">Linear</button>
+                </div>
                 
                 <select id="chart-type" class="select select-bordered select-sm">
                     <option value="candlestick" selected>Candlestick</option>

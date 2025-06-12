@@ -9,7 +9,7 @@ export const themeToggle = document.getElementById('theme-toggle');
 export const dataSummaryElement = document.getElementById('dataSummary');
 export const loadingIndicator = document.getElementById('loadingIndicator');
 export const timezoneSelect = document.getElementById('timezone');
-export const scalingSelect = document.getElementById('scaling');
+// export const scalingSelect = document.getElementById('scaling');
 export const chartTypeSelect = document.getElementById('chart-type');
 export const screenshotBtn = document.getElementById('screenshot-btn');
 

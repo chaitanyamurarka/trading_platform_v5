@@ -24,13 +24,10 @@ export function setupChartObjectListeners() {
 }
 
 export function setupControlListeners(reloadChartCallback) {
-    // --- MODIFIED: Listeners are now aware of the "Live" toggle state ---
-
     // Handle changes for controls that define the chart's main context
     [elements.exchangeSelect, elements.symbolSelect, elements.intervalSelect].forEach(control => {
         control.addEventListener('change', () => {
             if (elements.liveToggle.checked) {
-                // If in live mode, perform a live-aware reload: fetch new data and reconnect the websocket
                 loadInitialChart().then(() => {
                     if (state.sessionToken) {
                         const symbol = elements.symbolSelect.value;
@@ -39,7 +36,6 @@ export function setupControlListeners(reloadChartCallback) {
                     }
                 });
             } else {
-                // If not in live mode, perform a standard full reload
                 reloadChartCallback();
             }
         });
@@ -49,19 +45,14 @@ export function setupControlListeners(reloadChartCallback) {
     [elements.startTimeInput, elements.endTimeInput, elements.timezoneSelect].forEach(control => {
         control.addEventListener('change', () => {
             if (elements.liveToggle.checked) {
-                // Unchecking the toggle will fire its own 'change' event,
-                // which correctly handles disconnecting the live feed.
                 elements.liveToggle.checked = false;
             }
-            // Proceed with a standard reload for the new time range
             reloadChartCallback();
         });
     });
 
-    // --- Live Toggle Listener (Unchanged) ---
     elements.liveToggle.addEventListener('change', (e) => {
         if (e.target.checked) {
-            // LIVE MODE ACTIVATED
             elements.endTimeInput.disabled = true;
             loadInitialChart().then(() => {
                 if (state.sessionToken) {
@@ -71,23 +62,34 @@ export function setupControlListeners(reloadChartCallback) {
                 }
             });
         } else {
-            // LIVE MODE DEACTIVATED
             elements.endTimeInput.disabled = false;
             disconnectFromLiveDataFeed();
         }
     });
 
-    // --- Scaling, UI, and other listeners (Unchanged) ---
     const autoScaleBtn = document.getElementById('scaling-auto-btn');
     const linearScaleBtn = document.getElementById('scaling-linear-btn');
 
     if (autoScaleBtn) {
         autoScaleBtn.addEventListener('click', () => {
             if (!state.mainChart) return;
+
+            // 1. Apply autoscale to the price axis
             state.mainChart.applyOptions({
                 rightPriceScale: { autoScale: true },
                 leftPriceScale: { autoScale: true }
             });
+
+            // 2. --- NEW: Reset the visible time range to the last 100 bars ---
+            if (state.allChartData && state.allChartData.length > 0) {
+                const dataSize = state.allChartData.length;
+                state.mainChart.timeScale().setVisibleLogicalRange({
+                    from: Math.max(0, dataSize - 100),
+                    to: dataSize - 1,
+                });
+            }
+
+            // 3. Update button styles
             autoScaleBtn.classList.add('btn-active');
             linearScaleBtn.classList.remove('btn-active');
         });

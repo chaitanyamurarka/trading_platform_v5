@@ -8,3 +8,5 @@ pywin32
 numpy
 tzdata
 pandas
+backports.zoneinfo; python_version < '3.9'
+apscheduler

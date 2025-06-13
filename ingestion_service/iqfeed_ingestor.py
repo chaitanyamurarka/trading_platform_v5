@@ -14,6 +14,9 @@ import numpy as np
 from dotenv import load_dotenv
 from influxdb_client import InfluxDBClient, Point, WriteOptions, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
+# NEW IMPORTS FOR SCHEDULER
+from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # Local imports from your project structure
 import pyiqfeed as iq
@@ -285,23 +288,52 @@ def daily_update(symbols_to_update: list, exchange: str):
             fetch_and_store_history(symbol, exchange, hist_conn)
 
     logging.info("--- Daily Update Process Finished ---")
-    influx_client.close()
+
+def scheduled_daily_update():
+    """
+    Wrapper function for the scheduler. Defines the symbols and exchange to update.
+    """
+    logging.info("--- Triggering Scheduled Daily Update ---")
+    symbols_to_update = ["AAPL", "AMZN", "TSLA", "@NQ#"]
+    exchange = "NASDAQ"
+    daily_update(symbols_to_update, exchange)
 
 
 if __name__ == '__main__':
-    if is_nasdaq_trading_hours():
-        logging.error("Cannot perform manual backfill during NASDAQ trading hours.")
-    else:
-        symbols_to_backfill = ["AAPL", "AMZN", "TSLA", "@NQ#"]
-        exchange = "NASDAQ"
 
-        iq_connection = get_iqfeed_history_conn()
-        if iq_connection:
-            with iq.ConnConnector([iq_connection]):
-                for new_symbol in symbols_to_backfill:
-                    fetch_and_store_history(new_symbol, exchange, iq_connection)
-        else:
-            logging.error("Failed to connect to IQFeed. Cannot perform backfill.")
+
+    logging.info("Updating Data on Script Initial Starting")
+    scheduled_daily_update()    
+
+    # --- NEW: RUN AS A PERSISTENT SCHEDULER SERVICE ---
+    logging.info("Initializing historical ingestion scheduler...")
     
-    logging.info("Script finished. Closing InfluxDB client.")
-    influx_client.close()
+    # Using BlockingScheduler because this script's only purpose is to run the scheduler.
+    # It will block the process from exiting.
+    scheduler = BlockingScheduler(timezone="America/New_York")
+
+    scheduler.add_job(
+        scheduled_daily_update,
+        trigger=CronTrigger(
+            hour=20, 
+            minute=1, 
+            second=0, 
+            day_of_week='mon-fri' # Only run on weekdays
+        ),
+        name="Daily Historical Market Data Ingestion"
+    )
+    
+    logging.info("Scheduler started. Waiting for jobs to run...")
+    logging.info("Press Ctrl+C to exit.")
+
+    try:
+        # This will start the scheduler and block until interrupted
+        scheduler.start()
+    except (KeyboardInterrupt, SystemExit):
+        # Handle graceful shutdown
+        logging.info("Scheduler stopped. Shutting down...")
+    finally:
+        # Ensure the InfluxDB client is closed properly on exit
+        if influx_client:
+            influx_client.close()
+            logging.info("InfluxDB client closed.")

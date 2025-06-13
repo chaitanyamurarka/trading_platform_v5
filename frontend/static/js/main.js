@@ -2,10 +2,10 @@
 import { state } from './app/2-state.js';
 import * as elements from './app/1-dom-elements.js';
 import { getChartTheme } from './app/3-chart-options.js';
-// --- MODIFIED: Import the new function ---
 import { syncSettingsInputs, updateThemeToggleIcon } from './app/4-ui-helpers.js';
 import { recreateMainSeries } from './app/5-chart-drawing.js';
-import { startSession, loadInitialChart } from './app/6-api-service.js';
+// --- MODIFIED: Import the new setAutomaticDateTime function ---
+import { startSession, loadInitialChart, setAutomaticDateTime } from './app/6-api-service.js';
 import { setupChartObjectListeners, setupControlListeners } from './app/7-event-listeners.js';
 
 function initializeNewChartObject() {
@@ -33,16 +33,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedTheme = localStorage.getItem('chartTheme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
     
-    // --- ADDED: Sync the toggle button's visual state ---
     updateThemeToggleIcon();
-    // ---------------------------------------------------
 
-    const now = new Date();
-    elements.endTimeInput.value = now.toISOString().slice(0, 16);
-    now.setDate(now.getDate() - 30);
-    elements.startTimeInput.value = now.toISOString().slice(0, 16);
+    // --- MODIFIED: Call setAutomaticDateTime() on page load ---
+    // This sets the default time range ONCE.
+    setAutomaticDateTime();
+
+    // --- REMOVED old manual date setting ---
+    // const now = new Date();
+    // elements.endTimeInput.value = now.toISOString().slice(0, 16);
+    // now.setDate(now.getDate() - 30);
+    // elements.startTimeInput.value = now.toISOString().slice(0, 16);
     
     setupControlListeners(reinitializeAndLoadChart);
     initializeNewChartObject();
-    startSession();
+    startSession(); // This will call loadInitialChart, which now uses the pre-filled values
 });

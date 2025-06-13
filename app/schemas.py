@@ -33,7 +33,7 @@ class CandleBase(BaseModel):
     The UNIX timestamp is now provided directly by the InfluxDB query.
     """
     # The datetime timestamp can be kept for logging/debugging or removed if not needed.
-    # timestamp: datetime = Field(..., description="The timestamp of the candle (timezone-aware).")
+    timestamp: datetime = Field(..., description="The timestamp of the candle (timezone-aware).")
     open: float = Field(..., description="The opening price for the candle period.")
     high: float = Field(..., description="The highest price for the candle period.")
     low: float = Field(..., description="The lowest price for the candle period.")

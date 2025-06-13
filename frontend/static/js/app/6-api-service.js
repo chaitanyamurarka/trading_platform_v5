@@ -4,10 +4,8 @@ import { state, constants } from './2-state.js';
 import * as elements from './1-dom-elements.js';
 import { showToast, updateDataSummary } from './4-ui-helpers.js';
 
-// ADD THIS LINE AT THE TOP OF THE FILE
 let liveDataSocket = null;
 
-// This function now returns the fetched data
 async function fetchInitialHistoricalData(sessionToken, exchange, token, interval, startTime, endTime, timezone) {
     const url = getHistoricalDataUrl(sessionToken, exchange, token, interval, startTime, endTime, timezone);
     const response = await fetch(url);
@@ -18,7 +16,6 @@ async function fetchInitialHistoricalData(sessionToken, exchange, token, interva
     return response.json();
 }
 
-// This function now returns the fetched data
 async function fetchHistoricalChunk(requestId, offset, limit) {
     const url = getHistoricalDataChunkUrl(requestId, offset, limit);
     const response = await fetch(url);
@@ -30,12 +27,10 @@ async function fetchHistoricalChunk(requestId, offset, limit) {
 }
 
 // =================================================================
-// --- NEW FUNCTION TO AUTOMATICALLY SET START AND END TIMES ---
+// --- MODIFIED: EXPORT THIS FUNCTION ---
 // =================================================================
-function setAutomaticDateTime() {
-    // Get current time and convert to ET ('America/New_York')
+export function setAutomaticDateTime() {
     const now = new Date();
-    // Using Intl.DateTimeFormat to reliably get the current time in a specific timezone
     const etFormatter = new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/New_York',
         year: 'numeric', month: '2-digit', day: '2-digit',
@@ -47,24 +42,19 @@ function setAutomaticDateTime() {
         return acc;
     }, {});
     
-    // Construct a date object representing the current time in ET
     const etDate = new Date(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`);
 
     let targetEndDate = new Date(etDate);
 
-    // If current ET is before 8 PM (20:00), we set the target to the previous day.
     if (etDate.getHours() < 20) {
         targetEndDate.setDate(targetEndDate.getDate() - 1);
     }
 
-    // Set the end time to exactly 8 PM (20:00:00) on the target date
     targetEndDate.setHours(20, 0, 0, 0);
 
-    // Set the start time to be 90 days before the end time for a decent initial view
     let startDate = new Date(targetEndDate);
-    startDate.setDate(startDate.getDate() - 90);
+    startDate.setDate(startDate.getDate() - 30);
     
-    // Function to format Date objects into 'YYYY-MM-DDTHH:mm' string for datetime-local input
     const formatForInput = (date) => {
         const year = date.getFullYear();
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -74,10 +64,9 @@ function setAutomaticDateTime() {
         return `${year}-${month}-${day}T${hours}:${minutes}`;
     };
 
-    // Update the DOM elements with the calculated values
     elements.startTimeInput.value = formatForInput(startDate);
     elements.endTimeInput.value = formatForInput(targetEndDate);
-    elements.timezoneSelect.value = 'America/New_York'; // Explicitly set timezone
+    elements.timezoneSelect.value = 'America/New_York';
     console.log(`Auto-set time range: ${elements.startTimeInput.value} to ${elements.endTimeInput.value} [America/New_York]`);
 }
 
@@ -113,8 +102,8 @@ export async function fetchAndPrependDataChunk() {
 export async function loadInitialChart() {
     if (!state.sessionToken) return;
 
-    // --- ADD THIS LINE TO AUTOMATICALLY SET THE TIME ---
-    setAutomaticDateTime();
+    // --- REMOVED THIS LINE TO PREVENT RESETTING THE TIME ON EVERY LOAD ---
+    // setAutomaticDateTime();
 
     state.currentlyFetching = true;
     elements.loadingIndicator.style.display = 'flex';
@@ -148,9 +137,7 @@ export async function loadInitialChart() {
             state.mainChart.timeScale().fitContent();
         }
 
-        // --- ADD THIS LINE ---
         state.mainChart.priceScale().applyOptions({ autoscale: true });
-        // ---------------------
 
         updateDataSummary(state.allChartData.at(-1));
     } catch (error) {
@@ -179,91 +166,45 @@ export async function startSession() {
     }
 }
 
-// =================================================================
-// --- NEW: FUNCTIONS TO MANAGE LIVE DATA WEBSOCKET ---
-// =================================================================
-
-/**
- * Disconnects any existing live data WebSocket connection.
- */
+// --- Live data functions remain unchanged ---
 export function disconnectFromLiveDataFeed() {
     if (liveDataSocket) {
         console.log('Closing existing WebSocket connection.');
-        liveDataSocket.onclose = null; // Prevent the onclose handler from firing during a manual disconnect
+        liveDataSocket.onclose = null;
         liveDataSocket.close();
         liveDataSocket = null;
     }
 }
 
-/**
- * Connects to the live data WebSocket and sets up message handling.
- * @param {string} symbol - The symbol to watch.
- * @param {string} interval - The chart interval.
- */
 export function connectToLiveDataFeed(symbol, interval) {
-    // Ensure any old connection is closed before starting a new one.
     disconnectFromLiveDataFeed();
-
     const timezone = elements.timezoneSelect.value;
     if (!timezone) {
         showToast('Please select a timezone before connecting to live feed.', 'error');
         return;
     }
-
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsURL = `${wsProtocol}//${window.location.host}/ws/live/${symbol}/${interval}/${encodeURIComponent(timezone)}`;
-    
     console.log(`Connecting to WebSocket: ${wsURL}`);
     showToast(`Connecting to live feed for ${symbol}...`, 'info');
-
-    // Create a local WebSocket object to prevent race conditions.
     const socket = new WebSocket(wsURL);
-
-    // Assign all event handlers to the local `socket` object first.
     socket.onopen = () => {
         console.log('WebSocket connection established.');
         showToast(`Live feed connected for ${symbol}!`, 'success');
     };
-    
     socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
-
-        // Case 1: The message is an array, so it's a backfill.
         if (Array.isArray(data)) {
             if (data.length === 0) return;
-
             console.log(`Received backfill data with ${data.length} bars.`);
-
-            // Format the incoming backfill data to match the chart's required structure
-            const formattedBackfillBars = data.map(c => ({
-                time: c.unix_timestamp,
-                open: c.open,
-                high: c.high,
-                low: c.low,
-                close: c.close
-            }));
-
-            const formattedVolumeBars = data.map(c => ({
-                time: c.unix_timestamp,
-                value: c.volume,
-                color: c.close >= c.open ? elements.volUpColorInput.value + '80' : elements.volDownColorInput.value + '80'
-            }));
-
-            // Get the timestamp of the last bar we already have from the initial historical fetch
-            const lastHistoricalTime = state.allChartData.length > 0
-                ? state.allChartData[state.allChartData.length - 1].time
-                : 0;
-
-            // Filter the backfill to only include bars that are newer than our existing data
+            const formattedBackfillBars = data.map(c => ({ time: c.unix_timestamp, open: c.open, high: c.high, low: c.low, close: c.close }));
+            const formattedVolumeBars = data.map(c => ({ time: c.unix_timestamp, value: c.volume, color: c.close >= c.open ? elements.volUpColorInput.value + '80' : elements.volDownColorInput.value + '80' }));
+            const lastHistoricalTime = state.allChartData.length > 0 ? state.allChartData[state.allChartData.length - 1].time : 0;
             const newOhlcBars = formattedBackfillBars.filter(d => d.time > lastHistoricalTime);
             const newVolumeBars = formattedVolumeBars.filter(d => d.time > lastHistoricalTime);
-
             if (newOhlcBars.length > 0) {
-                // Append the new, non-overlapping bars to our main data arrays
                 state.allChartData.push(...newOhlcBars);
                 state.allVolumeData.push(...newVolumeBars);
-
-                // Use setData() to efficiently load the merged data chunk into the chart
                 state.mainSeries.setData(state.allChartData);
                 state.volumeSeries.setData(state.allVolumeData);
                 console.log(`Applied ${newOhlcBars.length} new bars from backfill.`);
@@ -271,31 +212,16 @@ export function connectToLiveDataFeed(symbol, interval) {
                 console.log('Backfill data did not contain any new bars.');
             }
         }
-        // Case 2: The message is an object, so it's a single live bar update.
         else if (data.current_bar && state.mainSeries) {
             const { current_bar } = data;
-            
-            const chartFormattedBar = {
-                time: current_bar.unix_timestamp,
-                open: current_bar.open,
-                high: current_bar.high,
-                low: current_bar.low,
-                close: current_bar.close
-            };
+            const chartFormattedBar = { time: current_bar.unix_timestamp, open: current_bar.open, high: current_bar.high, low: current_bar.low, close: current_bar.close };
             state.mainSeries.update(chartFormattedBar);
-            
             if (state.volumeSeries) {
-                const volumeData = {
-                    time: current_bar.unix_timestamp, 
-                    value: current_bar.volume,
-                    color: current_bar.close >= current_bar.open ? elements.volUpColorInput.value + '80' : elements.volDownColorInput.value + '80'
-                };
+                const volumeData = { time: current_bar.unix_timestamp, value: current_bar.volume, color: current_bar.close >= current_bar.open ? elements.volUpColorInput.value + '80' : elements.volDownColorInput.value + '80' };
                 state.volumeSeries.update(volumeData);
             }
             updateDataSummary(current_bar);
         }
     };
-
-    // Only assign to the module-level variable after the object is fully configured.
     liveDataSocket = socket;
 }

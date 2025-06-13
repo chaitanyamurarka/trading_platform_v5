@@ -39,7 +39,9 @@ logging.basicConfig(
 app = FastAPI(
     title="Trading Platform API",
     description="Backend API for historical data, live data feeds, and strategy execution.",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url=None,  # Disable the /docs endpoint
+    redoc_url=None  # Disable the /redoc endpoint
 )
 
 # --- Static Frontend File Serving ---
@@ -67,11 +69,16 @@ else:
 # Add GZip middleware to compress responses for better network performance.
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+origins = [
+    "http://localhost",
+    "http://localhost:8080", # Example for a local dev server
+]
+
 # Add CORS (Cross-Origin Resource Sharing) middleware to allow requests from any origin.
 # This is crucial for the frontend (served, e.g., on localhost:xxxx) to communicate with the backend API.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=origins,  # Allows all origins
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers

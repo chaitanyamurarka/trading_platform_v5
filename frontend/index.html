@@ -37,7 +37,7 @@
         </header>
 
         <main class="flex-grow flex flex-col">
-        <div id="controls-toolbar" class="flex flex-wrap items-center justify-center sm:justify-start gap-2 p-2 bg-base-100 rounded-box shadow-lg mb-4">
+        <div id="controls-toolbar" class="flex items-center justify-start gap-2 p-2 bg-base-100 rounded-box shadow-lg mb-4 overflow-x-auto">
             <select id="exchange" class="select select-bordered select-sm">
                 <option value="NASDAQ" selected>NASDAQ</option>
             </select>
@@ -65,8 +65,6 @@
             </select>
             <input id="start_time" type="datetime-local" class="input input-bordered input-sm">
             <input id="end_time" type="datetime-local" class="input input-bordered input-sm">
-            
-            <!-- <button id="go-btn" class="btn btn-sm btn-primary">Go</button> -->
             
             <div class="form-control flex flex-row items-center">
                 <label for="live-toggle" class="label cursor-pointer">

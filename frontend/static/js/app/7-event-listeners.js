@@ -23,6 +23,8 @@ export function setupChartObjectListeners() {
     });
 }
 
+// In frontend/static/js/app/7-event-listeners.js
+
 export function setupControlListeners(reloadChartCallback) {
     // Handle changes for controls that define the chart's main context
     [elements.exchangeSelect, elements.symbolSelect, elements.intervalSelect].forEach(control => {
@@ -41,15 +43,35 @@ export function setupControlListeners(reloadChartCallback) {
         });
     });
 
-    // Handle changes for time-related controls, which should disable live mode
-    [elements.startTimeInput, elements.endTimeInput, elements.timezoneSelect].forEach(control => {
+    // --- FIX: Handle Start/End time changes separately ---
+    // These controls should still disable live mode.
+    [elements.startTimeInput, elements.endTimeInput].forEach(control => {
         control.addEventListener('change', () => {
             if (elements.liveToggle.checked) {
-                elements.liveToggle.checked = false;
+                elements.liveToggle.checked = false; // This will trigger the liveToggle's own 'change' listener to disconnect.
             }
             reloadChartCallback();
         });
     });
+
+    // --- FIX: Create a dedicated listener for the timezone selector ---
+    elements.timezoneSelect.addEventListener('change', () => {
+        if (elements.liveToggle.checked) {
+            // If in live mode, reload the chart and reconnect the feed with the new timezone.
+            loadInitialChart().then(() => {
+                if (state.sessionToken) {
+                    const symbol = elements.symbolSelect.value;
+                    const interval = elements.intervalSelect.value;
+                    // connectToLiveDataFeed reads the new timezone value from the DOM element.
+                    connectToLiveDataFeed(symbol, interval);
+                }
+            });
+        } else {
+            // If not in live mode, just reload the historical chart data.
+            reloadChartCallback();
+        }
+    });
+
 
     elements.liveToggle.addEventListener('change', (e) => {
         if (e.target.checked) {

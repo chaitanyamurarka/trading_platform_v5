@@ -184,8 +184,7 @@ export function connectToLiveDataFeed(symbol, interval) {
         return;
     }
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsURL = `${wsProtocol}//${window.location.host}/ws/live/${symbol}/${interval}/${encodeURIComponent(timezone)}`;
-    console.log(`Connecting to WebSocket: ${wsURL}`);
+    const wsURL = `${wsProtocol}//${window.location.host}/ws/live/${encodeURIComponent(symbol)}/${interval}/${encodeURIComponent(timezone)}`;    console.log(`Connecting to WebSocket: ${wsURL}`);
     showToast(`Connecting to live feed for ${symbol}...`, 'info');
     const socket = new WebSocket(wsURL);
     socket.onopen = () => {

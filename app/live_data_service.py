@@ -56,6 +56,7 @@ class BarResampler:
         as a naive datetime object (timezone info is stripped).
         """
         if dt.tzinfo is None:
+            # This is a fallback, but dt should always be aware.
             dt = dt.replace(tzinfo=timezone.utc)
 
         # Convert the UTC time to the user's selected timezone
@@ -75,10 +76,10 @@ class BarResampler:
         return bar_start_local_dt.replace(tzinfo=None)
 
     # --- MODIFIED METHOD ---
-    def add_bar(self, bar: Dict, is_from_dtn_backfill: bool = False) -> Optional[schemas.Candle]:
+    def add_bar(self, bar: Dict) -> Optional[schemas.Candle]:
         """
-        Adds a new 1-second bar. It applies a timezone correction if the bar
-        is from the DTN backfill data.
+        Adds a new 1-second bar. Assumes the bar dictionary contains a
+        standard UTC Unix timestamp from Redis.
         """
         completed_bar = None
         
@@ -88,22 +89,12 @@ class BarResampler:
         close_p = float(bar['close'])
         volume = int(bar['volume'])
         
-        timestamp_utc: datetime
+        # --- FIX: Correctly interpret the UTC timestamp from Redis ---
+        # Create a timezone-aware datetime object directly in UTC.
+        timestamp_utc = datetime.fromtimestamp(bar['timestamp'], tz=timezone.utc)
 
-        # if is_from_dtn_backfill:
-        #     # Path for Backfill Data: Corrects a timestamp that represents ET wall-clock time.
-        #     naive_wall_time = datetime.fromtimestamp(bar['timestamp'], tz=timezone.utc).replace(tzinfo=None)
-        #     source_timezone = ZoneInfo("America/New_York")
-        #     source_aware_dt = naive_wall_time.replace(tzinfo=source_timezone)
-        #     timestamp_utc = source_aware_dt.astimezone(timezone.utc)
-        # else:
-        #     # Path for Live Data: Assumes a standard, correct UTC Unix timestamp.
-        #     timestamp_utc = datetime.fromtimestamp(bar['timestamp'], tz=timezone.utc)
-        
-        # The rest of the logic proceeds with a correctly-defined `timestamp_utc`
-
-        timestamp_utc = datetime.fromtimestamp(bar['timestamp'])
-
+        # This logic correctly creates a "fake" UTC timestamp for the charting library
+        # based on the user's selected display timezone.
         bar_start_naive = self._get_bar_start_time_naive(timestamp_utc)
         fake_utc_timestamp = bar_start_naive.replace(tzinfo=timezone.utc).timestamp()
         
@@ -129,30 +120,39 @@ class BarResampler:
         return completed_bar
 
 
+# --- UNIFIED AND CORRECTED FUNCTION ---
 async def get_cached_intraday_bars(symbol: str, interval: str, timezone_str: str) -> List[schemas.Candle]:
     """
     Fetches 1-second bars from the Redis cache, resamples them, and returns them.
     """
     cache_key = f"intraday_bars:{symbol}"
     try:
+        # Fetch all bars from the list
         cached_bars_str = await redis_client.lrange(cache_key, 0, -1)
         if not cached_bars_str:
+            logger.info(f"No cached intraday bars found for {symbol}.")
             return []
 
+        # Deserialize the bars
         one_sec_bars = [json.loads(b) for b in cached_bars_str]
-        
+        logger.info(f"Fetched {len(one_sec_bars)} 1-sec bars from cache for {symbol} for resampling.")
+
+        # Resample the bars
         resampler = BarResampler(interval, timezone_str)
         resampled_bars = []
         for bar in one_sec_bars:
-            # --- MODIFIED CALL ---
-            # Pass the flag indicating this is backfill data needing correction.
-            completed_bar = resampler.add_bar(bar, is_from_dtn_backfill=True)
+            # The 'is_from_dtn_backfill' flag is removed as it's no longer needed.
+            completed_bar = resampler.add_bar(bar)
             if completed_bar:
                 resampled_bars.append(completed_bar)
         
+        # --- FIX RETAINED ---
+        # After the loop, append the final, incomplete bar from the resampler.
+        # This ensures the last bar of the backfill is not dropped.
         if resampler.current_bar:
             resampled_bars.append(resampler.current_bar)
         
+        logger.info(f"Resampled into {len(resampled_bars)} bars for {symbol} with interval {interval}.")
         return resampled_bars
 
     except Exception as e:
@@ -163,33 +163,21 @@ async def get_cached_intraday_bars(symbol: str, interval: str, timezone_str: str
 async def live_data_stream(websocket: WebSocket, symbol: str, interval: str, timezone_str: str):
     """
     Handles the WebSocket connection for live data streaming.
-
-    This function first accepts the connection, sends a batch of available cached
-    intraday data, and then proceeds to stream live updates. It listens for
-    client disconnections gracefully and ensures all resources are cleaned up.
     """
     await websocket.accept()
     resampler = BarResampler(interval, timezone_str)
     
-    # The `finally` block ensures that cleanup occurs even if the client disconnects unexpectedly.
     try:
         # --- 1. Send Initial Cached Data ---
-        # Attempt to send a snapshot of recent history first.
-        try:
-            cached_bars = await get_cached_intraday_bars(symbol, interval, timezone_str)
-            if cached_bars:
-                await websocket.send_json([bar.model_dump() for bar in cached_bars])
-                logger.info(f"Sent {len(cached_bars)} cached bars to client for {symbol}.")
-        except Exception as e:
-            logger.error(f"Could not send cached data for {symbol}: {e}", exc_info=True)
-            # Decide if this error is fatal. For now, we proceed to the live stream.
+        cached_bars = await get_cached_intraday_bars(symbol, interval, timezone_str)
+        if cached_bars:
+            await websocket.send_json([bar.model_dump() for bar in cached_bars])
+            logger.info(f"Sent {len(cached_bars)} cached bars to client for {symbol}.")
 
         # --- 2. Stream Live Data ---
-        # Listen to the Redis pub/sub generator for new 1-second bars.
         async for bar_message in redis_pubsub_generator(symbol):
             completed_bar = resampler.add_bar(bar_message)
             
-            # Prepare the payload with the completed bar (if any) and the current, in-progress bar.
             live_update_payload = {
                 "completed_bar": completed_bar.model_dump() if completed_bar else None,
                 "current_bar": resampler.current_bar.model_dump() if resampler.current_bar else None
@@ -197,61 +185,16 @@ async def live_data_stream(websocket: WebSocket, symbol: str, interval: str, tim
             await websocket.send_json(live_update_payload)
 
     except (WebSocketDisconnect, ConnectionClosed):
-        # This is an expected exception when the client closes the connection.
         logger.info(f"Client disconnected from {symbol} stream. Closing connection gracefully.")
     except Exception as e:
-        # Catches any other unexpected errors during the process.
         logger.error(f"An unexpected error occurred in the live stream for {symbol}: {e}", exc_info=True)
     finally:
-        # --- 3. Cleanup ---
-        # This block runs whether the client disconnected or an error occurred.
         logger.info(f"Closing stream and cleaning up resources for {symbol}.")
-        
-        # Unsubscribe from the Redis channel to prevent resource leaks.
-        # await cleanup_redis_subscription(symbol) # Assumes such a function exists.
-        
-        # Ensure the WebSocket is closed from the server side.
         try:
             await websocket.close()
         except RuntimeError:
-            # This can occur if the socket is already in a closed state, which is safe to ignore.
             pass
 
-# --- FUNCTION WITH FIX ---
-async def get_cached_intraday_bars(symbol: str, interval: str, timezone_str: str) -> List[schemas.Candle]:
-    """
-    Fetches 1-second bars from the Redis cache, resamples them, and returns them.
-    """
-    cache_key = f"intraday_bars:{symbol}"
-    try:
-        # Fetch all bars from the list
-        cached_bars_str = await redis_client.lrange(cache_key, 0, -1)
-        if not cached_bars_str:
-            return []
-
-        # Deserialize the bars
-        one_sec_bars = [json.loads(b) for b in cached_bars_str]
-        
-        # Resample the bars
-        resampler = BarResampler(interval, timezone_str)
-        resampled_bars = []
-        for bar in one_sec_bars:
-            completed_bar = resampler.add_bar(bar)
-            if completed_bar:
-                resampled_bars.append(completed_bar)
-        
-        # --- FIX ---
-        # After the loop, append the final, incomplete bar from the resampler.
-        # This ensures the last bar of the backfill is not dropped.
-        if resampler.current_bar:
-            resampled_bars.append(resampler.current_bar)
-        # --- END FIX ---
-        
-        return resampled_bars
-
-    except Exception as e:
-        logger.error(f"Error fetching/resampling cached intraday bars for {symbol}: {e}", exc_info=True)
-        return []
 
 async def redis_pubsub_generator(symbol: str) -> AsyncGenerator[Dict, None]:
     """
@@ -263,39 +206,12 @@ async def redis_pubsub_generator(symbol: str) -> AsyncGenerator[Dict, None]:
         await pubsub.subscribe(channel_name)
         logger.info(f"Subscribed to Redis channel: {channel_name}")
         while True:
+            # Use a timeout to prevent the loop from blocking indefinitely
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=10)
             if message:
                 try:
                     yield json.loads(message['data'])
                 except (json.JSONDecodeError, TypeError) as e:
                     logger.error(f"Error decoding bar data from Redis: {e}")
+            # Add a small sleep to yield control, preventing a tight loop on timeout
             await asyncio.sleep(0.01)
-
-async def websocket_handler(websocket: WebSocket, symbol: str, interval: str, timezone: str):
-    """
-    Manages the WebSocket lifecycle for a live data subscription.
-    """
-    await websocket.accept()
-    resampler = BarResampler(interval, timezone)
-    redis_generator = redis_pubsub_generator(symbol)
-
-    try:
-        async for bar in redis_generator:
-            completed_bar = resampler.add_bar(bar)
-            current_incomplete_bar = resampler.current_bar
-
-            response_data = {
-                "completed_bar": completed_bar.model_dump(mode='json') if completed_bar else None,
-                "current_bar": current_incomplete_bar.model_dump(mode='json') if current_incomplete_bar else None
-            }
-
-            await websocket.send_json(response_data)
-
-    except asyncio.CancelledError:
-        logger.info(f"WebSocket for {symbol}/{interval} was cancelled.")
-    except Exception as e:
-        logger.error(f"Error in WebSocket handler for {symbol}/{interval}: {e}", exc_info=True)
-    finally:
-        logger.info(f"Closing WebSocket connection for {symbol}/{interval}.")
-        if not websocket.client_state == 'DISCONNECTED':
-             await websocket.close()

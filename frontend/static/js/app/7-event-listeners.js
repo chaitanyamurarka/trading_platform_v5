@@ -80,14 +80,9 @@ export function setupControlListeners(reloadChartCallback) {
                 leftPriceScale: { autoScale: true }
             });
 
-            // 2. --- NEW: Reset the visible time range to the last 100 bars ---
-            if (state.allChartData && state.allChartData.length > 0) {
-                const dataSize = state.allChartData.length;
-                state.mainChart.timeScale().setVisibleLogicalRange({
-                    from: Math.max(0, dataSize - 100),
-                    to: dataSize - 1,
-                });
-            }
+            // 2. --- MODIFIED: Enable auto-scrolling to the latest bar ---
+            // This will keep a small margin from the right edge, making new bars visible
+            state.mainChart.timeScale().applyOptions({ rightOffset: 12 });
 
             // 3. Update button styles
             autoScaleBtn.classList.add('btn-active');
@@ -102,6 +97,10 @@ export function setupControlListeners(reloadChartCallback) {
                 rightPriceScale: { autoScale: false },
                 leftPriceScale: { autoScale: false }
             });
+
+            // --- NEW: Disable auto-scrolling when switching to linear scale ---
+            state.mainChart.timeScale().applyOptions({ rightOffset: 0 });
+
             linearScaleBtn.classList.add('btn-active');
             autoScaleBtn.classList.remove('btn-active');
         });

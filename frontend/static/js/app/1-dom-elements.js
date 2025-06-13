@@ -36,3 +36,4 @@ export const wickUpColorInput = document.getElementById('setting-wick-up-color')
 export const wickDownColorInput = document.getElementById('setting-wick-down-color');
 export const volUpColorInput = document.getElementById('setting-vol-up-color');
 export const volDownColorInput = document.getElementById('setting-vol-down-color');
+export const disableWicksInput = document.getElementById('setting-disable-wicks');

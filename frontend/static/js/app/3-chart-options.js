@@ -57,13 +57,17 @@ export const chartOptions = (theme) => {
  * @returns {object} The series options.
  */
 export function getSeriesOptions() {
+    const disableWicks = elements.disableWicksInput.checked;
+    const backgroundColor = elements.bgColorInput.value; // Get the current background color
+
     return {
         upColor: elements.upColorInput.value,
         downColor: elements.downColorInput.value,
         borderDownColor: elements.downColorInput.value,
         borderUpColor: elements.upColorInput.value,
-        wickDownColor: elements.wickDownColorInput.value,
-        wickUpColor: elements.wickUpColorInput.value,
+        // Use the background color to make wicks "invisible" when disabled
+        wickDownColor: disableWicks ? backgroundColor : elements.wickDownColorInput.value,
+        wickUpColor: disableWicks ? backgroundColor : elements.wickUpColorInput.value,
     };
 }
 

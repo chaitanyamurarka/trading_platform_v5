@@ -1,7 +1,3 @@
-Here is a detailed `README.md` for your trading platform project.
-
------
-
 # Real-Time Trading Charting Platform
 
 This project is a comprehensive, real-time financial charting platform designed to display historical and live market data. It features a Python-based backend using FastAPI and a dynamic, interactive frontend built with HTML, CSS, and JavaScript, leveraging the Lightweight Charts™ library for high-performance financial visualizations.

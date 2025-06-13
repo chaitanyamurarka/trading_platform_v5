@@ -191,27 +191,52 @@ def get_iqfeed_bar_conn() -> iq.BarConn | None:
         logging.error(f"Cannot create BarConn: IQFeed service is not running. Last error: {iqfeed_launch_error}")
         return None
     
-def get_iqfeed_quote_conn() -> iq.BarConn | None:
+def get_iqfeed_quote_conn() -> iq.QuoteConn | None:
     """
-    Provides a BarConn object for fetching streaming bar data.
+    Provides a QuoteConn object for fetching streaming bar data.
 
     This function ensures the IQFeed service is running before returning a
     connection object for live, interval-based data.
 
     Returns:
-        An instance of `iq.BarConn` if the service is live, otherwise `None`.
+        An instance of `iq.QuoteConn` if the service is live, otherwise `None`.
     """
     # Always perform a live check before returning a connection.
     launch_iqfeed_service_if_needed()
 
     if is_iqfeed_service_launched:
         try:
-            bar_conn = iq.QuoteConn(name="TradingAppQuoteConnection")
+            quote_conn = iq.QuoteConn(name="TradingAppQuoteConnection")
             logging.debug("IQFeed QuoteConn instance created.")
-            return bar_conn
+            return quote_conn
         except Exception as e:
             logging.error(f"Failed to create IQFeed QuoteConn instance: {e}", exc_info=True)
             return None
     else:
         logging.error(f"Cannot create QuoteConn: IQFeed service is not running. Last error: {iqfeed_launch_error}")
+        return None
+    
+def get_iqfeed_look_conn() -> iq.LookupConn | None:
+    """
+    Provides a LookupConn object for fetching streaming bar data.
+
+    This function ensures the IQFeed service is running before returning a
+    connection object for live, interval-based data.
+
+    Returns:
+        An instance of `iq.LookupConn` if the service is live, otherwise `None`.
+    """
+    # Always perform a live check before returning a connection.
+    launch_iqfeed_service_if_needed()
+
+    if is_iqfeed_service_launched:
+        try:
+            Lookup_conn = iq.LookupConn(name="TradingAppLookupConnection")
+            logging.debug("IQFeed LookupConn instance created.")
+            return Lookup_conn
+        except Exception as e:
+            logging.error(f"Failed to create IQFeed LookupConn instance: {e}", exc_info=True)
+            return None
+    else:
+        logging.error(f"Cannot create LookupConn: IQFeed service is not running. Last error: {iqfeed_launch_error}")
         return None

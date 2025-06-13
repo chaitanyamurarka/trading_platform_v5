@@ -6,7 +6,7 @@ import pyiqfeed as iq
 import numpy as np
 
 # --- Local Imports ---
-from dtn_iq_client import launch_iqfeed_service_if_needed, get_iqfeed_history_conn, get_iqfeed_quote_conn
+from dtn_iq_client import launch_iqfeed_service_if_needed, get_iqfeed_history_conn, get_iqfeed_quote_conn, get_iqfeed_look_conn
 from config import settings
 
 # --- Configuration ---
@@ -61,6 +61,7 @@ def main_diagnostic():
 
     hist_conn = get_iqfeed_history_conn()
     quote_conn = get_iqfeed_quote_conn()
+    look_conn = get_iqfeed_look_conn()
 
     if not hist_conn or not quote_conn:
         logging.error("Could not get IQFeed connections. Exiting.")
@@ -69,17 +70,19 @@ def main_diagnostic():
     listener = VerboseListener()
     quote_conn.add_listener(listener)
 
-    with iq.ConnConnector([hist_conn, quote_conn]):
+    with iq.ConnConnector([hist_conn, quote_conn, look_conn]):
         # --- Test 1: Symbol Lookup (Corrected) ---
         logging.info(f"\n--- Running Test 1: Looking up symbols for '{SEARCH_TERM}' ---")
         try:
             # Using a more standard lookup method
-            lookup_data = hist_conn.request_lookup(lookup_type='description', search_string=SEARCH_TERM)
-            if lookup_data:
+            lookup_data = look_conn.request_symbols_by_filter(search_term=SEARCH_TERM)
+           # --- FIX: Change the condition to check the length of the array ---
+            if lookup_data is not None and len(lookup_data) > 0:
                 logging.info(f"Found symbols for '{SEARCH_TERM}':")
                 # Limiting output to first 10 results for brevity
                 for symbol_info in lookup_data[:10]:
-                    logging.info(f"  - {symbol_info.decode(errors='ignore').strip()}")
+                    # --- FIX: Print the object directly instead of decoding it ---
+                    logging.info(f"  - {symbol_info}")
             else:
                 logging.warning(f"No symbols found for description '{SEARCH_TERM}'.")
         except Exception as e:

@@ -106,6 +106,16 @@ export function setupControlListeners(reloadChartCallback) {
             // This will keep a small margin from the right edge, making new bars visible
             state.mainChart.timeScale().applyOptions({ rightOffset: 12 });
 
+            if (state.allChartData.length > 0) {
+            const dataSize = state.allChartData.length;
+            state.mainChart.timeScale().setVisibleLogicalRange({
+                from: Math.max(0, dataSize - 100),
+                to: dataSize - 1,
+            });
+            } else {
+                state.mainChart.timeScale().fitContent();
+            }
+
             // 3. Update button styles
             autoScaleBtn.classList.add('btn-active');
             linearScaleBtn.classList.remove('btn-active');

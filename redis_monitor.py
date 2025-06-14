@@ -113,7 +113,7 @@ if __name__ == "__main__":
     # --- IMPORTANT ---
     # Replace this with your actual Redis URL
     # Format: redis://[password@]host:port/db
-    REDIS_URL = "redis://65.1.181.184:6379/0"
+    REDIS_URL = "redis://localhost:6379/0"
 
     # --- CHOOSE ACTION ---
     print("What would you like to do?")

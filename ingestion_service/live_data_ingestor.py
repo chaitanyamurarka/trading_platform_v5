@@ -54,6 +54,8 @@ class LiveTickListener(iq.SilentQuoteListener):
                         "volume": int(bar['prd_vlm']),
                     }
                     self.redis_client.rpush(cache_key, json.dumps(bar_data))
+                    self.redis_client.expire(cache_key, 86400)
+
                 
                 logging.info(f"Successfully backfilled {len(today_data)} bars for {symbol}.")
             else:
@@ -134,7 +136,7 @@ class LiveTickListener(iq.SilentQuoteListener):
 def main():
     """Main function to start listening to live data."""
     launch_iqfeed_service_if_needed()
-    symbols = ["AAPL", "AMZN", "TSLA", "@NQ#"]
+    symbols = ["AAPL", "AMZN", "TSLA", "@NQM25"]
     
     quote_conn = get_iqfeed_quote_conn()
     hist_conn = get_iqfeed_history_conn()
@@ -149,7 +151,7 @@ def main():
     with iq.ConnConnector([quote_conn, hist_conn]):
         for symbol in symbols:
             listener.backfill_intraday_data(symbol, hist_conn)
-            quote_conn.watch(symbol)
+            quote_conn.trades_watch(symbol)
             logging.info(f"Watching {symbol} for live updates.")
         
         try:

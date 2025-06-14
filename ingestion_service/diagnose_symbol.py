@@ -11,7 +11,7 @@ from config import settings
 
 # --- Configuration ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(funcName)s - %(message)s')
-SYMBOL_TO_TEST = "@NQ#"
+SYMBOL_TO_TEST = "@NQM25"
 SEARCH_TERM = "E-mini NASDAQ 100"
 
 class VerboseListener(iq.SilentQuoteListener):
@@ -80,7 +80,14 @@ def main_diagnostic():
             if lookup_data is not None and len(lookup_data) > 0:
                 logging.info(f"Found symbols for '{SEARCH_TERM}':")
                 # Limiting output to first 10 results for brevity
-                for symbol_info in lookup_data[:10]:
+
+                try:
+                    logging.info("Trying to print column names")
+                    logging.info(lookup_data[0].dtype.names)
+                except Exception as e:
+                    logging(f"Error while checking columnn names {e}")
+
+                for symbol_info in lookup_data[:50]:
                     # --- FIX: Print the object directly instead of decoding it ---
                     logging.info(f"  - {symbol_info}")
             else:
@@ -90,25 +97,25 @@ def main_diagnostic():
         
         time.sleep(2)
 
-        # --- Test 2: Historical Data Download ---
-        logging.info(f"\n--- Running Test 2: Requesting recent historical bar for '{SYMBOL_TO_TEST}' ---")
-        try:
-            bar_data = hist_conn.request_bars(ticker=SYMBOL_TO_TEST, interval_len=60, interval_type='s', max_bars=1)
-            if bar_data is not None and len(bar_data) > 0:
-                logging.info(f"Successfully downloaded historical bar for {SYMBOL_TO_TEST}:\n{bar_data[0]}")
-            else:
-                logging.warning(f"No historical bar data returned for {SYMBOL_TO_TEST}.")
-        except iq.NoDataError:
-            logging.error(f"NoDataError for {SYMBOL_TO_TEST}. Check symbol and subscription.")
-        except Exception as e:
-            logging.error(f"Error requesting historical data for {SYMBOL_TO_TEST}: {e}", exc_info=True)
+        # # --- Test 2: Historical Data Download ---
+        # logging.info(f"\n--- Running Test 2: Requesting recent historical bar for '{SYMBOL_TO_TEST}' ---")
+        # try:
+        #     bar_data = hist_conn.request_bars(ticker=SYMBOL_TO_TEST, interval_len=60, interval_type='s', max_bars=1)
+        #     if bar_data is not None and len(bar_data) > 0:
+        #         logging.info(f"Successfully downloaded historical bar for {SYMBOL_TO_TEST}:\n{bar_data[0]}")
+        #     else:
+        #         logging.warning(f"No historical bar data returned for {SYMBOL_TO_TEST}.")
+        # except iq.NoDataError:
+        #     logging.error(f"NoDataError for {SYMBOL_TO_TEST}. Check symbol and subscription.")
+        # except Exception as e:
+        #     logging.error(f"Error requesting historical data for {SYMBOL_TO_TEST}: {e}", exc_info=True)
         
-        time.sleep(2)
+        # time.sleep(2)
 
         # --- Test 3: Live Data Watch ---
         logging.info(f"\n--- Running Test 3: Watching '{SYMBOL_TO_TEST}' for 30 seconds ---")
         logging.info("Column names and data will be printed below.")
-        quote_conn.watch(SYMBOL_TO_TEST)
+        quote_conn.trades_watch(SYMBOL_TO_TEST)
         
         try:
             time.sleep(30)

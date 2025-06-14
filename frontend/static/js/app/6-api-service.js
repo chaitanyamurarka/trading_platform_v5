@@ -26,50 +26,87 @@ async function fetchHistoricalChunk(requestId, offset, limit) {
     return response.json();
 }
 
-// =================================================================
-// --- MODIFIED: EXPORT THIS FUNCTION ---
-// =================================================================
 export function setAutomaticDateTime() {
+    const selectedTimezone = elements.timezoneSelect.value || 'America/New_York';
+
     const now = new Date();
-    const etFormatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/New_York',
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
-    });
+    const nyParts = getDatePartsInZone(now, 'America/New_York');
 
-    const parts = etFormatter.formatToParts(now).reduce((acc, part) => {
-        acc[part.type] = part.value;
-        return acc;
-    }, {});
-    
-    const etDate = new Date(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`);
+    // Create a Date object representing 8:00 PM New York time
+    const eightPMNY = new Date(Date.UTC(nyParts.year, nyParts.month - 1, nyParts.day, 0, 0, 0));
+    eightPMNY.setUTCHours(getUTCHourOffset('America/New_York', 20, now));
 
-    let targetEndDate = new Date(etDate);
+    // If NY current date is same but time < 20:00 → subtract a day
+    const currentNY = new Date();
+    const currentParts = getDatePartsInZone(currentNY, 'America/New_York');
 
-    if (etDate.getHours() < 20) {
-        targetEndDate.setDate(targetEndDate.getDate() - 1);
+    if (currentParts.year === nyParts.year && currentParts.month === nyParts.month && currentParts.day === nyParts.day) {
+        const nowNY = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        const endNY = new Date(nowNY);
+        endNY.setHours(20, 0, 0, 0); // set 8 PM NY today
+
+        if (nowNY < endNY) {
+            endNY.setDate(endNY.getDate() - 1);
+        }
     }
 
-    targetEndDate.setHours(20, 0, 0, 0);
+    const finalEndUTC = new Date(eightPMNY);
+    const finalStartUTC = new Date(finalEndUTC);
+    finalStartUTC.setUTCDate(finalEndUTC.getUTCDate() - 30);
 
-    let startDate = new Date(targetEndDate);
-    startDate.setDate(startDate.getDate() - 30);
-    
-    const formatForInput = (date) => {
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const day = date.getDate().toString().padStart(2, '0');
-        const hours = date.getHours().toString().padStart(2, '0');
-        const minutes = date.getMinutes().toString().padStart(2, '0');
-        return `${year}-${month}-${day}T${hours}:${minutes}`;
-    };
+    const startFormatted = formatDateInZone(finalStartUTC, selectedTimezone);
+    const endFormatted = formatDateInZone(finalEndUTC, selectedTimezone);
 
-    elements.startTimeInput.value = formatForInput(startDate);
-    elements.endTimeInput.value = formatForInput(targetEndDate);
-    elements.timezoneSelect.value = 'America/New_York';
-    console.log(`Auto-set time range: ${elements.startTimeInput.value} to ${elements.endTimeInput.value} [America/New_York]`);
+    elements.startTimeInput.value = startFormatted;
+    elements.endTimeInput.value = endFormatted;
+
+    console.log(`[${selectedTimezone}] Start: ${startFormatted}, End: ${endFormatted}`);
 }
 
+function formatDateInZone(date, timeZone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit',
+        hour12: false
+    }).formatToParts(date);
+
+    const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
+    return `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}`;
+}
+
+function getCurrentHourInTimezone(timeZone) {
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        hour: '2-digit',
+        hour12: false
+    }).formatToParts(now);
+    return parseInt(parts.find(p => p.type === 'hour').value, 10);
+}
+
+function getDatePartsInZone(date, timeZone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(date);
+
+    return Object.fromEntries(parts.map(p => [p.type, parseInt(p.value, 10)]));
+}
+
+function getUTCHourOffset(timeZone, targetHourInZone, referenceDate) {
+    const testDate = new Date(referenceDate);
+    testDate.setUTCHours(0, 0, 0, 0); // midnight UTC
+
+    const zoneHour = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        hour: '2-digit',
+        hour12: false
+    }).formatToParts(testDate).find(p => p.type === 'hour').value;
+
+    const offset = targetHourInZone - parseInt(zoneHour, 10);
+    return 0 + offset;
+}
 
 export async function fetchAndPrependDataChunk() {
     const nextOffset = state.chartCurrentOffset - constants.DATA_CHUNK_SIZE;

@@ -6,11 +6,25 @@ import { state } from './2-state.js';
 export function showToast(message, type = 'info') {
     const toastContainer = document.getElementById('toast-container');
     if (!toastContainer) return;
+
     const toast = document.createElement('div');
-    toast.className = `alert alert-${type} shadow-lg`;
-    toast.innerHTML = `<div><span>${message}</span></div>`;
+    toast.className = `alert alert-${type} shadow-lg transition-opacity duration-300 opacity-0`;
+    toast.innerHTML = `<span>${message}</span>`;
+
     toastContainer.appendChild(toast);
-    setTimeout(() => toast.remove(), 4000);
+
+    // Animate in
+    requestAnimationFrame(() => {
+        toast.classList.remove('opacity-0');
+        toast.classList.add('opacity-100');
+    });
+
+    // Auto-dismiss after 4s
+    setTimeout(() => {
+        toast.classList.remove('opacity-100');
+        toast.classList.add('opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
 }
 
 export function updateDataSummary(latestData) {
@@ -51,3 +65,5 @@ export function updateThemeToggleIcon() {
         toggleCheckbox.checked = theme === 'dark';
     }
 }
+
+window.showToast = showToast;

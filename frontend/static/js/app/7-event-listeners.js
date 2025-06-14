@@ -1,9 +1,9 @@
 // frontend/static/js/app/7-event-listeners.js
 import * as elements from './1-dom-elements.js';
 import { state } from './2-state.js';
-import { applyTheme, updateThemeToggleIcon } from './4-ui-helpers.js';
+import { applyTheme, updateThemeToggleIcon,showToast } from './4-ui-helpers.js';
 import { takeScreenshot, recreateMainSeries, applySeriesColors, applyVolumeColors } from './5-chart-drawing.js';
-import { loadInitialChart, fetchAndPrependDataChunk, connectToLiveDataFeed, disconnectFromLiveDataFeed } from './6-api-service.js';
+import { loadInitialChart, fetchAndPrependDataChunk, connectToLiveDataFeed, disconnectFromLiveDataFeed, setAutomaticDateTime } from './6-api-service.js';
 import { reinitializeAndLoadChart } from '../main.js';
 
 export function setupChartObjectListeners() {
@@ -54,8 +54,21 @@ export function setupControlListeners(reloadChartCallback) {
         });
     });
 
+    let previousTimezoneValue = elements.timezoneSelect.value;
+
+    elements.timezoneSelect.addEventListener('focus', () => {
+        previousTimezoneValue = elements.timezoneSelect.value;
+    });
+
     // --- FIX: Create a dedicated listener for the timezone selector ---
     elements.timezoneSelect.addEventListener('change', () => {
+        if (elements.liveToggle.checked) {
+        showToast('Cannot change timezone while Live mode is ON.', 'warning');
+        elements.timezoneSelect.value = previousTimezoneValue; // revert to previous
+        return;
+        }
+
+        setAutomaticDateTime();
         if (elements.liveToggle.checked) {
             // If in live mode, reload the chart and reconnect the feed with the new timezone.
             loadInitialChart().then(() => {

@@ -2,7 +2,7 @@ import os
 import logging
 import time
 from datetime import datetime as dt, timezone, time as dt_time, timedelta
-
+import pytz
 # For timezone-aware datetime objects. ZoneInfo is in the standard library for Python 3.9+.
 # If using an older version, you might need 'pip install backports.zoneinfo' or use 'pytz'.
 try:
@@ -78,10 +78,10 @@ def get_last_completed_session_end_time_utc() -> dt:
     if now_et.time() < dt_time(20, 0):
         target_date_et -= timedelta(days=1)
         
-    if target_date_et.weekday() == 5:
-        target_date_et -= timedelta(days=1)
-    elif target_date_et.weekday() == 6:
-        target_date_et -= timedelta(days=2)
+    # if target_date_et.weekday() == 5:
+    #     target_date_et -= timedelta(days=1)
+    # elif target_date_et.weekday() == 6:
+    #     target_date_et -= timedelta(days=2)
         
     session_end_et = dt.combine(target_date_et, dt_time(20, 0), tzinfo=et_zone)
     
@@ -318,7 +318,8 @@ if __name__ == '__main__':
             hour=20, 
             minute=1, 
             second=0, 
-            day_of_week='mon-fri' # Only run on weekdays
+            # day_of_week='mon-fri', # Only run on weekdays
+            timezone=pytz.timezone('America/New_York')
         ),
         name="Daily Historical Market Data Ingestion"
     )
